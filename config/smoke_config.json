@@ -1,0 +1,37 @@
+{
+  "symbols": ["BSBUSDT", "HYPEUSDT"],
+  "accounts": [
+    {
+      "paper_account": "tp14_smoke_robust",
+      "initial_equity_usdt": 100.0,
+      "position_margin_pct": 0.05,
+      "leverage": 10.0,
+      "take_profit_pct": 0.14
+    }
+  ],
+  "entry_model": {
+    "signal_timeframe": "15m",
+    "signal_lag_bars": 1,
+    "gate_quantile": 0.8,
+    "resolver_quantile": 0.45,
+    "gate_entry_quantile": 0.85,
+    "cooldown_bars": 16,
+    "max_hold_bars": 128,
+    "train_days": 1
+  },
+  "execution": {
+    "poll_interval_seconds": 60,
+    "workers": 2,
+    "load_workers": 1,
+    "tx_cost_bps": 5.0,
+    "max_stop_pct": 0.1,
+    "maintenance_margin_rate": 0.005,
+    "liquidation_buffer_pct": 0.005,
+    "state_update_interval_minutes": 5,
+    "funding_update_interval_minutes": 60
+  },
+  "paths": {
+    "data_root": "data_smoke",
+    "run_dir": "runs_smoke/tp14"
+  }
+}
