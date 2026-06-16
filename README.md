@@ -10,8 +10,15 @@ It does not run universe selection, optimization, or backtests on the server. Th
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-python tp14_paper_sim.py bootstrap --config config/paper_config.json
-python tp14_paper_sim.py loop --config config/paper_config.json
+python tp14_paper_sim.py start --config config/paper_config.json --workers 4
+```
+
+With pm2 on Linux:
+
+```bash
+# Optional: enable WeCom/DingTalk-compatible text webhook notifications.
+export TP14_WEBHOOK_URL='https://...'
+bash deploy_pm2.sh
 ```
 
 For Windows:
@@ -20,8 +27,7 @@ For Windows:
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
-python tp14_paper_sim.py bootstrap --config config/paper_config.json
-python tp14_paper_sim.py loop --config config/paper_config.json
+python tp14_paper_sim.py start --config config/paper_config.json
 ```
 
 ## Runtime Model
@@ -31,6 +37,10 @@ python tp14_paper_sim.py loop --config config/paper_config.json
 - Entry: `OI_Expansion_48` gate plus `whale_fade` resolver.
 - Signal lag: 1 closed 15m bar. No future bar is used.
 - Accounts: robust 5% margin at 10x and high-risk 10% margin at 10x.
+
+## Binance Data Limit
+
+Binance public `/futures/data/*` endpoints for OI and long/short ratios only allow recent history. The bootstrap command caps those datasets at 30 days while downloading 60 days of 15m klines and funding. If the bot keeps running, local OI/ratio history will accumulate beyond the initial public-API window.
 
 ## Important Files
 
@@ -53,8 +63,20 @@ Run forever:
 python tp14_paper_sim.py loop --config config/paper_config.json
 ```
 
-Bootstrap or refresh 60 days of history:
+Bootstrap from packaged seed data. If the seed archive is missing, this falls back to downloading history:
 
 ```bash
 python tp14_paper_sim.py bootstrap --config config/paper_config.json --workers 4
+```
+
+Use the packaged seed data instead of a long bootstrap:
+
+```bash
+python tp14_paper_sim.py seed --config config/paper_config.json
+```
+
+One command that seeds if needed, performs a short incremental refresh, then runs forever:
+
+```bash
+python tp14_paper_sim.py start --config config/paper_config.json --workers 4
 ```

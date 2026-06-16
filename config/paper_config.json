@@ -58,6 +58,12 @@
     "state_update_interval_minutes": 5,
     "funding_update_interval_minutes": 60
   },
+  "notifications": {
+    "enabled": true,
+    "webhook_url_env": "TP14_WEBHOOK_URL",
+    "webhook_url_file": "",
+    "timeout_seconds": 10
+  },
   "paths": {
     "data_root": "data",
     "run_dir": "runs/tp14"

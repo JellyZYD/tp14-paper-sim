@@ -2,6 +2,7 @@ data/
 runs/
 data_smoke/
 runs_smoke/
+bootstrap_seed/stage/
 *.log
 *.lock
 __pycache__/

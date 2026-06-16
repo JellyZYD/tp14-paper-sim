@@ -1,0 +1,1150 @@
+{
+  "created_at": "2026-06-16T17:25:59.435029+00:00",
+  "symbols": [
+    "BSBUSDT",
+    "GWEIUSDT",
+    "JTOUSDT",
+    "CLOUSDT",
+    "HUSDT",
+    "LABUSDT",
+    "HYPEUSDT",
+    "BASUSDT",
+    "1000LUNCUSDT",
+    "NEARUSDT",
+    "MEGAUSDT",
+    "DASHUSDT",
+    "NILUSDT",
+    "BABYUSDT",
+    "FETUSDT",
+    "ARKMUSDT",
+    "BASEDUSDT",
+    "EIGENUSDT",
+    "ARUSDT",
+    "LITUSDT"
+  ],
+  "signal_lookback_days": 60,
+  "state_lookback_days": 30,
+  "exec_lookback_days": 3,
+  "rows": [
+    {
+      "symbol": "BSBUSDT",
+      "dataset": "data/klines",
+      "source": "..\\data\\top200_15m\\klines\\BSBUSDT.parquet",
+      "rows": 5761,
+      "start": "2026-04-17T16:30:00+00:00",
+      "end": "2026-06-16T16:30:00+00:00"
+    },
+    {
+      "symbol": "GWEIUSDT",
+      "dataset": "data/klines",
+      "source": "..\\data\\top200_15m\\klines\\GWEIUSDT.parquet",
+      "rows": 5761,
+      "start": "2026-04-17T16:30:00+00:00",
+      "end": "2026-06-16T16:30:00+00:00"
+    },
+    {
+      "symbol": "JTOUSDT",
+      "dataset": "data/klines",
+      "source": "..\\data\\top200_15m\\klines\\JTOUSDT.parquet",
+      "rows": 5761,
+      "start": "2026-04-17T16:30:00+00:00",
+      "end": "2026-06-16T16:30:00+00:00"
+    },
+    {
+      "symbol": "CLOUSDT",
+      "dataset": "data/klines",
+      "source": "..\\data\\top200_15m\\klines\\CLOUSDT.parquet",
+      "rows": 5761,
+      "start": "2026-04-17T16:30:00+00:00",
+      "end": "2026-06-16T16:30:00+00:00"
+    },
+    {
+      "symbol": "HUSDT",
+      "dataset": "data/klines",
+      "source": "..\\data\\top200_15m\\klines\\HUSDT.parquet",
+      "rows": 5761,
+      "start": "2026-04-17T16:30:00+00:00",
+      "end": "2026-06-16T16:30:00+00:00"
+    },
+    {
+      "symbol": "LABUSDT",
+      "dataset": "data/klines",
+      "source": "..\\data\\top200_15m\\klines\\LABUSDT.parquet",
+      "rows": 5761,
+      "start": "2026-04-17T16:30:00+00:00",
+      "end": "2026-06-16T16:30:00+00:00"
+    },
+    {
+      "symbol": "HYPEUSDT",
+      "dataset": "data/klines",
+      "source": "..\\data\\top200_15m\\klines\\HYPEUSDT.parquet",
+      "rows": 5761,
+      "start": "2026-04-17T16:30:00+00:00",
+      "end": "2026-06-16T16:30:00+00:00"
+    },
+    {
+      "symbol": "BASUSDT",
+      "dataset": "data/klines",
+      "source": "..\\data\\top200_15m\\klines\\BASUSDT.parquet",
+      "rows": 5761,
+      "start": "2026-04-17T16:30:00+00:00",
+      "end": "2026-06-16T16:30:00+00:00"
+    },
+    {
+      "symbol": "1000LUNCUSDT",
+      "dataset": "data/klines",
+      "source": "..\\data\\top200_15m\\klines\\1000LUNCUSDT.parquet",
+      "rows": 5761,
+      "start": "2026-04-17T16:30:00+00:00",
+      "end": "2026-06-16T16:30:00+00:00"
+    },
+    {
+      "symbol": "NEARUSDT",
+      "dataset": "data/klines",
+      "source": "..\\data\\top200_15m\\klines\\NEARUSDT.parquet",
+      "rows": 5761,
+      "start": "2026-04-17T16:30:00+00:00",
+      "end": "2026-06-16T16:30:00+00:00"
+    },
+    {
+      "symbol": "MEGAUSDT",
+      "dataset": "data/klines",
+      "source": "..\\data\\top200_15m\\klines\\MEGAUSDT.parquet",
+      "rows": 5761,
+      "start": "2026-04-17T16:30:00+00:00",
+      "end": "2026-06-16T16:30:00+00:00"
+    },
+    {
+      "symbol": "DASHUSDT",
+      "dataset": "data/klines",
+      "source": "..\\data\\top200_15m\\klines\\DASHUSDT.parquet",
+      "rows": 5761,
+      "start": "2026-04-17T16:30:00+00:00",
+      "end": "2026-06-16T16:30:00+00:00"
+    },
+    {
+      "symbol": "NILUSDT",
+      "dataset": "data/klines",
+      "source": "..\\data\\top200_15m\\klines\\NILUSDT.parquet",
+      "rows": 5761,
+      "start": "2026-04-17T16:30:00+00:00",
+      "end": "2026-06-16T16:30:00+00:00"
+    },
+    {
+      "symbol": "BABYUSDT",
+      "dataset": "data/klines",
+      "source": "..\\data\\top200_15m\\klines\\BABYUSDT.parquet",
+      "rows": 5761,
+      "start": "2026-04-17T16:30:00+00:00",
+      "end": "2026-06-16T16:30:00+00:00"
+    },
+    {
+      "symbol": "FETUSDT",
+      "dataset": "data/klines",
+      "source": "..\\data\\top200_15m\\klines\\FETUSDT.parquet",
+      "rows": 5761,
+      "start": "2026-04-17T16:30:00+00:00",
+      "end": "2026-06-16T16:30:00+00:00"
+    },
+    {
+      "symbol": "ARKMUSDT",
+      "dataset": "data/klines",
+      "source": "..\\data\\top200_15m\\klines\\ARKMUSDT.parquet",
+      "rows": 5761,
+      "start": "2026-04-17T16:30:00+00:00",
+      "end": "2026-06-16T16:30:00+00:00"
+    },
+    {
+      "symbol": "BASEDUSDT",
+      "dataset": "data/klines",
+      "source": "..\\data\\top200_15m\\klines\\BASEDUSDT.parquet",
+      "rows": 5761,
+      "start": "2026-04-17T16:30:00+00:00",
+      "end": "2026-06-16T16:30:00+00:00"
+    },
+    {
+      "symbol": "EIGENUSDT",
+      "dataset": "data/klines",
+      "source": "..\\data\\top200_15m\\klines\\EIGENUSDT.parquet",
+      "rows": 5761,
+      "start": "2026-04-17T16:30:00+00:00",
+      "end": "2026-06-16T16:30:00+00:00"
+    },
+    {
+      "symbol": "ARUSDT",
+      "dataset": "data/klines",
+      "source": "..\\data\\top200_15m\\klines\\ARUSDT.parquet",
+      "rows": 5761,
+      "start": "2026-04-17T16:30:00+00:00",
+      "end": "2026-06-16T16:30:00+00:00"
+    },
+    {
+      "symbol": "LITUSDT",
+      "dataset": "data/klines",
+      "source": "..\\data\\top200_15m\\klines\\LITUSDT.parquet",
+      "rows": 5761,
+      "start": "2026-04-17T16:30:00+00:00",
+      "end": "2026-06-16T16:30:00+00:00"
+    },
+    {
+      "symbol": "BSBUSDT",
+      "dataset": "data/klines_1m",
+      "source": "..\\data\\klines\\BSBUSDT.parquet",
+      "rows": 4321,
+      "start": "2026-06-13T17:25:00+00:00",
+      "end": "2026-06-16T17:25:00+00:00"
+    },
+    {
+      "symbol": "GWEIUSDT",
+      "dataset": "data/klines_1m",
+      "source": "..\\data\\klines\\GWEIUSDT.parquet",
+      "rows": 4321,
+      "start": "2026-06-13T17:25:00+00:00",
+      "end": "2026-06-16T17:25:00+00:00"
+    },
+    {
+      "symbol": "JTOUSDT",
+      "dataset": "data/klines_1m",
+      "source": "..\\data\\klines\\JTOUSDT.parquet",
+      "rows": 4321,
+      "start": "2026-06-13T17:25:00+00:00",
+      "end": "2026-06-16T17:25:00+00:00"
+    },
+    {
+      "symbol": "CLOUSDT",
+      "dataset": "data/klines_1m",
+      "source": "..\\data\\klines\\CLOUSDT.parquet",
+      "rows": 4321,
+      "start": "2026-06-13T17:25:00+00:00",
+      "end": "2026-06-16T17:25:00+00:00"
+    },
+    {
+      "symbol": "HUSDT",
+      "dataset": "data/klines_1m",
+      "source": "..\\data\\klines\\HUSDT.parquet",
+      "rows": 4321,
+      "start": "2026-06-13T17:25:00+00:00",
+      "end": "2026-06-16T17:25:00+00:00"
+    },
+    {
+      "symbol": "LABUSDT",
+      "dataset": "data/klines_1m",
+      "source": "..\\data\\klines\\LABUSDT.parquet",
+      "rows": 4321,
+      "start": "2026-06-13T17:25:00+00:00",
+      "end": "2026-06-16T17:25:00+00:00"
+    },
+    {
+      "symbol": "HYPEUSDT",
+      "dataset": "data/klines_1m",
+      "source": "..\\data\\klines\\HYPEUSDT.parquet",
+      "rows": 4321,
+      "start": "2026-06-13T17:25:00+00:00",
+      "end": "2026-06-16T17:25:00+00:00"
+    },
+    {
+      "symbol": "BASUSDT",
+      "dataset": "data/klines_1m",
+      "source": "..\\data\\klines\\BASUSDT.parquet",
+      "rows": 4321,
+      "start": "2026-06-13T17:25:00+00:00",
+      "end": "2026-06-16T17:25:00+00:00"
+    },
+    {
+      "symbol": "1000LUNCUSDT",
+      "dataset": "data/klines_1m",
+      "source": "..\\data\\klines\\1000LUNCUSDT.parquet",
+      "rows": 4321,
+      "start": "2026-06-13T17:25:00+00:00",
+      "end": "2026-06-16T17:25:00+00:00"
+    },
+    {
+      "symbol": "NEARUSDT",
+      "dataset": "data/klines_1m",
+      "source": "..\\data\\klines\\NEARUSDT.parquet",
+      "rows": 4321,
+      "start": "2026-06-13T17:25:00+00:00",
+      "end": "2026-06-16T17:25:00+00:00"
+    },
+    {
+      "symbol": "MEGAUSDT",
+      "dataset": "data/klines_1m",
+      "source": "..\\data\\klines\\MEGAUSDT.parquet",
+      "rows": 4321,
+      "start": "2026-06-13T17:25:00+00:00",
+      "end": "2026-06-16T17:25:00+00:00"
+    },
+    {
+      "symbol": "DASHUSDT",
+      "dataset": "data/klines_1m",
+      "source": "..\\data\\klines\\DASHUSDT.parquet",
+      "rows": 4321,
+      "start": "2026-06-13T17:25:00+00:00",
+      "end": "2026-06-16T17:25:00+00:00"
+    },
+    {
+      "symbol": "NILUSDT",
+      "dataset": "data/klines_1m",
+      "source": "..\\data\\klines\\NILUSDT.parquet",
+      "rows": 4321,
+      "start": "2026-06-13T17:25:00+00:00",
+      "end": "2026-06-16T17:25:00+00:00"
+    },
+    {
+      "symbol": "BABYUSDT",
+      "dataset": "data/klines_1m",
+      "source": "..\\data\\klines\\BABYUSDT.parquet",
+      "rows": 4321,
+      "start": "2026-06-13T17:25:00+00:00",
+      "end": "2026-06-16T17:25:00+00:00"
+    },
+    {
+      "symbol": "FETUSDT",
+      "dataset": "data/klines_1m",
+      "source": "..\\data\\klines\\FETUSDT.parquet",
+      "rows": 4321,
+      "start": "2026-06-13T17:25:00+00:00",
+      "end": "2026-06-16T17:25:00+00:00"
+    },
+    {
+      "symbol": "ARKMUSDT",
+      "dataset": "data/klines_1m",
+      "source": "..\\data\\klines\\ARKMUSDT.parquet",
+      "rows": 4321,
+      "start": "2026-06-13T17:25:00+00:00",
+      "end": "2026-06-16T17:25:00+00:00"
+    },
+    {
+      "symbol": "BASEDUSDT",
+      "dataset": "data/klines_1m",
+      "source": "..\\data\\klines\\BASEDUSDT.parquet",
+      "rows": 4321,
+      "start": "2026-06-13T17:25:00+00:00",
+      "end": "2026-06-16T17:25:00+00:00"
+    },
+    {
+      "symbol": "EIGENUSDT",
+      "dataset": "data/klines_1m",
+      "source": "..\\data\\klines\\EIGENUSDT.parquet",
+      "rows": 4321,
+      "start": "2026-06-13T17:25:00+00:00",
+      "end": "2026-06-16T17:25:00+00:00"
+    },
+    {
+      "symbol": "ARUSDT",
+      "dataset": "data/klines_1m",
+      "source": "..\\data\\klines\\ARUSDT.parquet",
+      "rows": 4321,
+      "start": "2026-06-13T17:25:00+00:00",
+      "end": "2026-06-16T17:25:00+00:00"
+    },
+    {
+      "symbol": "LITUSDT",
+      "dataset": "data/klines_1m",
+      "source": "..\\data\\klines\\LITUSDT.parquet",
+      "rows": 4321,
+      "start": "2026-06-13T17:25:00+00:00",
+      "end": "2026-06-16T17:25:00+00:00"
+    },
+    {
+      "symbol": "BSBUSDT",
+      "dataset": "data/funding",
+      "source": "..\\data\\top200_15m\\funding\\BSBUSDT.parquet",
+      "rows": 361,
+      "start": "2026-04-17T16:00:00.001000+00:00",
+      "end": "2026-06-16T16:00:00.001000+00:00"
+    },
+    {
+      "symbol": "GWEIUSDT",
+      "dataset": "data/funding",
+      "source": "..\\data\\top200_15m\\funding\\GWEIUSDT.parquet",
+      "rows": 361,
+      "start": "2026-04-17T16:00:00.001000+00:00",
+      "end": "2026-06-16T16:00:00.001000+00:00"
+    },
+    {
+      "symbol": "JTOUSDT",
+      "dataset": "data/funding",
+      "source": "..\\data\\top200_15m\\funding\\JTOUSDT.parquet",
+      "rows": 361,
+      "start": "2026-04-17T16:00:00.001000+00:00",
+      "end": "2026-06-16T16:00:00.001000+00:00"
+    },
+    {
+      "symbol": "CLOUSDT",
+      "dataset": "data/funding",
+      "source": "..\\data\\top200_15m\\funding\\CLOUSDT.parquet",
+      "rows": 361,
+      "start": "2026-04-17T16:00:00.001000+00:00",
+      "end": "2026-06-16T16:00:00.001000+00:00"
+    },
+    {
+      "symbol": "HUSDT",
+      "dataset": "data/funding",
+      "source": "..\\data\\top200_15m\\funding\\HUSDT.parquet",
+      "rows": 483,
+      "start": "2026-04-17T16:00:00.001000+00:00",
+      "end": "2026-06-16T16:00:00.001000+00:00"
+    },
+    {
+      "symbol": "LABUSDT",
+      "dataset": "data/funding",
+      "source": "..\\data\\top200_15m\\funding\\LABUSDT.parquet",
+      "rows": 478,
+      "start": "2026-04-17T16:00:00.001000+00:00",
+      "end": "2026-06-16T16:00:00.001000+00:00"
+    },
+    {
+      "symbol": "HYPEUSDT",
+      "dataset": "data/funding",
+      "source": "..\\data\\top200_15m\\funding\\HYPEUSDT.parquet",
+      "rows": 361,
+      "start": "2026-04-17T16:00:00.001000+00:00",
+      "end": "2026-06-16T16:00:00.001000+00:00"
+    },
+    {
+      "symbol": "BASUSDT",
+      "dataset": "data/funding",
+      "source": "..\\data\\top200_15m\\funding\\BASUSDT.parquet",
+      "rows": 361,
+      "start": "2026-04-17T16:00:00.001000+00:00",
+      "end": "2026-06-16T16:00:00.001000+00:00"
+    },
+    {
+      "symbol": "1000LUNCUSDT",
+      "dataset": "data/funding",
+      "source": "..\\data\\top200_15m\\funding\\1000LUNCUSDT.parquet",
+      "rows": 181,
+      "start": "2026-04-17T16:00:00.001000+00:00",
+      "end": "2026-06-16T16:00:00.001000+00:00"
+    },
+    {
+      "symbol": "NEARUSDT",
+      "dataset": "data/funding",
+      "source": "..\\data\\top200_15m\\funding\\NEARUSDT.parquet",
+      "rows": 181,
+      "start": "2026-04-17T16:00:00.001000+00:00",
+      "end": "2026-06-16T16:00:00.001000+00:00"
+    },
+    {
+      "symbol": "MEGAUSDT",
+      "dataset": "data/funding",
+      "source": "..\\data\\top200_15m\\funding\\MEGAUSDT.parquet",
+      "rows": 361,
+      "start": "2026-04-17T16:00:00.001000+00:00",
+      "end": "2026-06-16T16:00:00.001000+00:00"
+    },
+    {
+      "symbol": "DASHUSDT",
+      "dataset": "data/funding",
+      "source": "..\\data\\top200_15m\\funding\\DASHUSDT.parquet",
+      "rows": 181,
+      "start": "2026-04-17T16:00:00.001000+00:00",
+      "end": "2026-06-16T16:00:00.001000+00:00"
+    },
+    {
+      "symbol": "NILUSDT",
+      "dataset": "data/funding",
+      "source": "..\\data\\top200_15m\\funding\\NILUSDT.parquet",
+      "rows": 361,
+      "start": "2026-04-17T16:00:00.001000+00:00",
+      "end": "2026-06-16T16:00:00.001000+00:00"
+    },
+    {
+      "symbol": "BABYUSDT",
+      "dataset": "data/funding",
+      "source": "..\\data\\top200_15m\\funding\\BABYUSDT.parquet",
+      "rows": 409,
+      "start": "2026-04-17T16:00:00.001000+00:00",
+      "end": "2026-06-16T16:00:00.001000+00:00"
+    },
+    {
+      "symbol": "FETUSDT",
+      "dataset": "data/funding",
+      "source": "..\\data\\top200_15m\\funding\\FETUSDT.parquet",
+      "rows": 181,
+      "start": "2026-04-17T16:00:00.001000+00:00",
+      "end": "2026-06-16T16:00:00.001000+00:00"
+    },
+    {
+      "symbol": "ARKMUSDT",
+      "dataset": "data/funding",
+      "source": "..\\data\\top200_15m\\funding\\ARKMUSDT.parquet",
+      "rows": 181,
+      "start": "2026-04-17T16:00:00.001000+00:00",
+      "end": "2026-06-16T16:00:00.001000+00:00"
+    },
+    {
+      "symbol": "BASEDUSDT",
+      "dataset": "data/funding",
+      "source": "..\\data\\top200_15m\\funding\\BASEDUSDT.parquet",
+      "rows": 361,
+      "start": "2026-04-17T16:00:00.001000+00:00",
+      "end": "2026-06-16T16:00:00.001000+00:00"
+    },
+    {
+      "symbol": "EIGENUSDT",
+      "dataset": "data/funding",
+      "source": "..\\data\\top200_15m\\funding\\EIGENUSDT.parquet",
+      "rows": 361,
+      "start": "2026-04-17T16:00:00.001000+00:00",
+      "end": "2026-06-16T16:00:00.001000+00:00"
+    },
+    {
+      "symbol": "ARUSDT",
+      "dataset": "data/funding",
+      "source": "..\\data\\top200_15m\\funding\\ARUSDT.parquet",
+      "rows": 181,
+      "start": "2026-04-17T16:00:00.001000+00:00",
+      "end": "2026-06-16T16:00:00.001000+00:00"
+    },
+    {
+      "symbol": "LITUSDT",
+      "dataset": "data/funding",
+      "source": "..\\data\\top200_15m\\funding\\LITUSDT.parquet",
+      "rows": 361,
+      "start": "2026-04-17T16:00:00.001000+00:00",
+      "end": "2026-06-16T16:00:00.001000+00:00"
+    },
+    {
+      "symbol": "BSBUSDT",
+      "dataset": "data/market_state_hist/oi",
+      "source": "..\\data\\top200_15m\\market_state_hist\\oi\\BSBUSDT.parquet",
+      "rows": 8641,
+      "start": "2026-05-17T16:35:00+00:00",
+      "end": "2026-06-16T16:35:00+00:00"
+    },
+    {
+      "symbol": "GWEIUSDT",
+      "dataset": "data/market_state_hist/oi",
+      "source": "..\\data\\top200_15m\\market_state_hist\\oi\\GWEIUSDT.parquet",
+      "rows": 8641,
+      "start": "2026-05-17T16:35:00+00:00",
+      "end": "2026-06-16T16:35:00+00:00"
+    },
+    {
+      "symbol": "JTOUSDT",
+      "dataset": "data/market_state_hist/oi",
+      "source": "..\\data\\top200_15m\\market_state_hist\\oi\\JTOUSDT.parquet",
+      "rows": 8641,
+      "start": "2026-05-17T16:35:00+00:00",
+      "end": "2026-06-16T16:35:00+00:00"
+    },
+    {
+      "symbol": "CLOUSDT",
+      "dataset": "data/market_state_hist/oi",
+      "source": "..\\data\\top200_15m\\market_state_hist\\oi\\CLOUSDT.parquet",
+      "rows": 8641,
+      "start": "2026-05-17T16:35:00+00:00",
+      "end": "2026-06-16T16:35:00+00:00"
+    },
+    {
+      "symbol": "HUSDT",
+      "dataset": "data/market_state_hist/oi",
+      "source": "..\\data\\top200_15m\\market_state_hist\\oi\\HUSDT.parquet",
+      "rows": 8641,
+      "start": "2026-05-17T16:35:00+00:00",
+      "end": "2026-06-16T16:35:00+00:00"
+    },
+    {
+      "symbol": "LABUSDT",
+      "dataset": "data/market_state_hist/oi",
+      "source": "..\\data\\top200_15m\\market_state_hist\\oi\\LABUSDT.parquet",
+      "rows": 8641,
+      "start": "2026-05-17T16:35:00+00:00",
+      "end": "2026-06-16T16:35:00+00:00"
+    },
+    {
+      "symbol": "HYPEUSDT",
+      "dataset": "data/market_state_hist/oi",
+      "source": "..\\data\\top200_15m\\market_state_hist\\oi\\HYPEUSDT.parquet",
+      "rows": 8641,
+      "start": "2026-05-17T16:35:00+00:00",
+      "end": "2026-06-16T16:35:00+00:00"
+    },
+    {
+      "symbol": "BASUSDT",
+      "dataset": "data/market_state_hist/oi",
+      "source": "..\\data\\top200_15m\\market_state_hist\\oi\\BASUSDT.parquet",
+      "rows": 8641,
+      "start": "2026-05-17T16:35:00+00:00",
+      "end": "2026-06-16T16:35:00+00:00"
+    },
+    {
+      "symbol": "1000LUNCUSDT",
+      "dataset": "data/market_state_hist/oi",
+      "source": "..\\data\\top200_15m\\market_state_hist\\oi\\1000LUNCUSDT.parquet",
+      "rows": 8641,
+      "start": "2026-05-17T16:35:00+00:00",
+      "end": "2026-06-16T16:35:00+00:00"
+    },
+    {
+      "symbol": "NEARUSDT",
+      "dataset": "data/market_state_hist/oi",
+      "source": "..\\data\\top200_15m\\market_state_hist\\oi\\NEARUSDT.parquet",
+      "rows": 8641,
+      "start": "2026-05-17T16:35:00+00:00",
+      "end": "2026-06-16T16:35:00+00:00"
+    },
+    {
+      "symbol": "MEGAUSDT",
+      "dataset": "data/market_state_hist/oi",
+      "source": "..\\data\\top200_15m\\market_state_hist\\oi\\MEGAUSDT.parquet",
+      "rows": 8641,
+      "start": "2026-05-17T16:35:00+00:00",
+      "end": "2026-06-16T16:35:00+00:00"
+    },
+    {
+      "symbol": "DASHUSDT",
+      "dataset": "data/market_state_hist/oi",
+      "source": "..\\data\\top200_15m\\market_state_hist\\oi\\DASHUSDT.parquet",
+      "rows": 8641,
+      "start": "2026-05-17T16:35:00+00:00",
+      "end": "2026-06-16T16:35:00+00:00"
+    },
+    {
+      "symbol": "NILUSDT",
+      "dataset": "data/market_state_hist/oi",
+      "source": "..\\data\\top200_15m\\market_state_hist\\oi\\NILUSDT.parquet",
+      "rows": 8641,
+      "start": "2026-05-17T16:35:00+00:00",
+      "end": "2026-06-16T16:35:00+00:00"
+    },
+    {
+      "symbol": "BABYUSDT",
+      "dataset": "data/market_state_hist/oi",
+      "source": "..\\data\\top200_15m\\market_state_hist\\oi\\BABYUSDT.parquet",
+      "rows": 8641,
+      "start": "2026-05-17T16:35:00+00:00",
+      "end": "2026-06-16T16:35:00+00:00"
+    },
+    {
+      "symbol": "FETUSDT",
+      "dataset": "data/market_state_hist/oi",
+      "source": "..\\data\\top200_15m\\market_state_hist\\oi\\FETUSDT.parquet",
+      "rows": 8641,
+      "start": "2026-05-17T16:35:00+00:00",
+      "end": "2026-06-16T16:35:00+00:00"
+    },
+    {
+      "symbol": "ARKMUSDT",
+      "dataset": "data/market_state_hist/oi",
+      "source": "..\\data\\top200_15m\\market_state_hist\\oi\\ARKMUSDT.parquet",
+      "rows": 8641,
+      "start": "2026-05-17T16:35:00+00:00",
+      "end": "2026-06-16T16:35:00+00:00"
+    },
+    {
+      "symbol": "BASEDUSDT",
+      "dataset": "data/market_state_hist/oi",
+      "source": "..\\data\\top200_15m\\market_state_hist\\oi\\BASEDUSDT.parquet",
+      "rows": 8641,
+      "start": "2026-05-17T16:35:00+00:00",
+      "end": "2026-06-16T16:35:00+00:00"
+    },
+    {
+      "symbol": "EIGENUSDT",
+      "dataset": "data/market_state_hist/oi",
+      "source": "..\\data\\top200_15m\\market_state_hist\\oi\\EIGENUSDT.parquet",
+      "rows": 8641,
+      "start": "2026-05-17T16:35:00+00:00",
+      "end": "2026-06-16T16:35:00+00:00"
+    },
+    {
+      "symbol": "ARUSDT",
+      "dataset": "data/market_state_hist/oi",
+      "source": "..\\data\\top200_15m\\market_state_hist\\oi\\ARUSDT.parquet",
+      "rows": 8641,
+      "start": "2026-05-17T16:35:00+00:00",
+      "end": "2026-06-16T16:35:00+00:00"
+    },
+    {
+      "symbol": "LITUSDT",
+      "dataset": "data/market_state_hist/oi",
+      "source": "..\\data\\top200_15m\\market_state_hist\\oi\\LITUSDT.parquet",
+      "rows": 8641,
+      "start": "2026-05-17T16:35:00+00:00",
+      "end": "2026-06-16T16:35:00+00:00"
+    },
+    {
+      "symbol": "BSBUSDT",
+      "dataset": "data/market_state_hist/global_acct_ratio",
+      "source": "..\\data\\top200_15m\\market_state_hist\\global_acct_ratio\\BSBUSDT.parquet",
+      "rows": 8641,
+      "start": "2026-05-17T16:35:00+00:00",
+      "end": "2026-06-16T16:35:00+00:00"
+    },
+    {
+      "symbol": "GWEIUSDT",
+      "dataset": "data/market_state_hist/global_acct_ratio",
+      "source": "..\\data\\top200_15m\\market_state_hist\\global_acct_ratio\\GWEIUSDT.parquet",
+      "rows": 8641,
+      "start": "2026-05-17T16:35:00+00:00",
+      "end": "2026-06-16T16:35:00+00:00"
+    },
+    {
+      "symbol": "JTOUSDT",
+      "dataset": "data/market_state_hist/global_acct_ratio",
+      "source": "..\\data\\top200_15m\\market_state_hist\\global_acct_ratio\\JTOUSDT.parquet",
+      "rows": 8641,
+      "start": "2026-05-17T16:35:00+00:00",
+      "end": "2026-06-16T16:35:00+00:00"
+    },
+    {
+      "symbol": "CLOUSDT",
+      "dataset": "data/market_state_hist/global_acct_ratio",
+      "source": "..\\data\\top200_15m\\market_state_hist\\global_acct_ratio\\CLOUSDT.parquet",
+      "rows": 8641,
+      "start": "2026-05-17T16:35:00+00:00",
+      "end": "2026-06-16T16:35:00+00:00"
+    },
+    {
+      "symbol": "HUSDT",
+      "dataset": "data/market_state_hist/global_acct_ratio",
+      "source": "..\\data\\top200_15m\\market_state_hist\\global_acct_ratio\\HUSDT.parquet",
+      "rows": 8641,
+      "start": "2026-05-17T16:35:00+00:00",
+      "end": "2026-06-16T16:35:00+00:00"
+    },
+    {
+      "symbol": "LABUSDT",
+      "dataset": "data/market_state_hist/global_acct_ratio",
+      "source": "..\\data\\top200_15m\\market_state_hist\\global_acct_ratio\\LABUSDT.parquet",
+      "rows": 8641,
+      "start": "2026-05-17T16:35:00+00:00",
+      "end": "2026-06-16T16:35:00+00:00"
+    },
+    {
+      "symbol": "HYPEUSDT",
+      "dataset": "data/market_state_hist/global_acct_ratio",
+      "source": "..\\data\\top200_15m\\market_state_hist\\global_acct_ratio\\HYPEUSDT.parquet",
+      "rows": 8641,
+      "start": "2026-05-17T16:35:00+00:00",
+      "end": "2026-06-16T16:35:00+00:00"
+    },
+    {
+      "symbol": "BASUSDT",
+      "dataset": "data/market_state_hist/global_acct_ratio",
+      "source": "..\\data\\top200_15m\\market_state_hist\\global_acct_ratio\\BASUSDT.parquet",
+      "rows": 8641,
+      "start": "2026-05-17T16:35:00+00:00",
+      "end": "2026-06-16T16:35:00+00:00"
+    },
+    {
+      "symbol": "1000LUNCUSDT",
+      "dataset": "data/market_state_hist/global_acct_ratio",
+      "source": "..\\data\\top200_15m\\market_state_hist\\global_acct_ratio\\1000LUNCUSDT.parquet",
+      "rows": 8641,
+      "start": "2026-05-17T16:35:00+00:00",
+      "end": "2026-06-16T16:35:00+00:00"
+    },
+    {
+      "symbol": "NEARUSDT",
+      "dataset": "data/market_state_hist/global_acct_ratio",
+      "source": "..\\data\\top200_15m\\market_state_hist\\global_acct_ratio\\NEARUSDT.parquet",
+      "rows": 8641,
+      "start": "2026-05-17T16:35:00+00:00",
+      "end": "2026-06-16T16:35:00+00:00"
+    },
+    {
+      "symbol": "MEGAUSDT",
+      "dataset": "data/market_state_hist/global_acct_ratio",
+      "source": "..\\data\\top200_15m\\market_state_hist\\global_acct_ratio\\MEGAUSDT.parquet",
+      "rows": 8641,
+      "start": "2026-05-17T16:35:00+00:00",
+      "end": "2026-06-16T16:35:00+00:00"
+    },
+    {
+      "symbol": "DASHUSDT",
+      "dataset": "data/market_state_hist/global_acct_ratio",
+      "source": "..\\data\\top200_15m\\market_state_hist\\global_acct_ratio\\DASHUSDT.parquet",
+      "rows": 8641,
+      "start": "2026-05-17T16:35:00+00:00",
+      "end": "2026-06-16T16:35:00+00:00"
+    },
+    {
+      "symbol": "NILUSDT",
+      "dataset": "data/market_state_hist/global_acct_ratio",
+      "source": "..\\data\\top200_15m\\market_state_hist\\global_acct_ratio\\NILUSDT.parquet",
+      "rows": 8641,
+      "start": "2026-05-17T16:35:00+00:00",
+      "end": "2026-06-16T16:35:00+00:00"
+    },
+    {
+      "symbol": "BABYUSDT",
+      "dataset": "data/market_state_hist/global_acct_ratio",
+      "source": "..\\data\\top200_15m\\market_state_hist\\global_acct_ratio\\BABYUSDT.parquet",
+      "rows": 8641,
+      "start": "2026-05-17T16:35:00+00:00",
+      "end": "2026-06-16T16:35:00+00:00"
+    },
+    {
+      "symbol": "FETUSDT",
+      "dataset": "data/market_state_hist/global_acct_ratio",
+      "source": "..\\data\\top200_15m\\market_state_hist\\global_acct_ratio\\FETUSDT.parquet",
+      "rows": 8641,
+      "start": "2026-05-17T16:35:00+00:00",
+      "end": "2026-06-16T16:35:00+00:00"
+    },
+    {
+      "symbol": "ARKMUSDT",
+      "dataset": "data/market_state_hist/global_acct_ratio",
+      "source": "..\\data\\top200_15m\\market_state_hist\\global_acct_ratio\\ARKMUSDT.parquet",
+      "rows": 8641,
+      "start": "2026-05-17T16:35:00+00:00",
+      "end": "2026-06-16T16:35:00+00:00"
+    },
+    {
+      "symbol": "BASEDUSDT",
+      "dataset": "data/market_state_hist/global_acct_ratio",
+      "source": "..\\data\\top200_15m\\market_state_hist\\global_acct_ratio\\BASEDUSDT.parquet",
+      "rows": 8641,
+      "start": "2026-05-17T16:35:00+00:00",
+      "end": "2026-06-16T16:35:00+00:00"
+    },
+    {
+      "symbol": "EIGENUSDT",
+      "dataset": "data/market_state_hist/global_acct_ratio",
+      "source": "..\\data\\top200_15m\\market_state_hist\\global_acct_ratio\\EIGENUSDT.parquet",
+      "rows": 8641,
+      "start": "2026-05-17T16:35:00+00:00",
+      "end": "2026-06-16T16:35:00+00:00"
+    },
+    {
+      "symbol": "ARUSDT",
+      "dataset": "data/market_state_hist/global_acct_ratio",
+      "source": "..\\data\\top200_15m\\market_state_hist\\global_acct_ratio\\ARUSDT.parquet",
+      "rows": 8641,
+      "start": "2026-05-17T16:35:00+00:00",
+      "end": "2026-06-16T16:35:00+00:00"
+    },
+    {
+      "symbol": "LITUSDT",
+      "dataset": "data/market_state_hist/global_acct_ratio",
+      "source": "..\\data\\top200_15m\\market_state_hist\\global_acct_ratio\\LITUSDT.parquet",
+      "rows": 8641,
+      "start": "2026-05-17T16:35:00+00:00",
+      "end": "2026-06-16T16:35:00+00:00"
+    },
+    {
+      "symbol": "BSBUSDT",
+      "dataset": "data/market_state_hist/top_acct_ratio",
+      "source": "..\\data\\top200_15m\\market_state_hist\\top_acct_ratio\\BSBUSDT.parquet",
+      "rows": 8641,
+      "start": "2026-05-17T16:35:00+00:00",
+      "end": "2026-06-16T16:35:00+00:00"
+    },
+    {
+      "symbol": "GWEIUSDT",
+      "dataset": "data/market_state_hist/top_acct_ratio",
+      "source": "..\\data\\top200_15m\\market_state_hist\\top_acct_ratio\\GWEIUSDT.parquet",
+      "rows": 8641,
+      "start": "2026-05-17T16:35:00+00:00",
+      "end": "2026-06-16T16:35:00+00:00"
+    },
+    {
+      "symbol": "JTOUSDT",
+      "dataset": "data/market_state_hist/top_acct_ratio",
+      "source": "..\\data\\top200_15m\\market_state_hist\\top_acct_ratio\\JTOUSDT.parquet",
+      "rows": 8641,
+      "start": "2026-05-17T16:35:00+00:00",
+      "end": "2026-06-16T16:35:00+00:00"
+    },
+    {
+      "symbol": "CLOUSDT",
+      "dataset": "data/market_state_hist/top_acct_ratio",
+      "source": "..\\data\\top200_15m\\market_state_hist\\top_acct_ratio\\CLOUSDT.parquet",
+      "rows": 8641,
+      "start": "2026-05-17T16:35:00+00:00",
+      "end": "2026-06-16T16:35:00+00:00"
+    },
+    {
+      "symbol": "HUSDT",
+      "dataset": "data/market_state_hist/top_acct_ratio",
+      "source": "..\\data\\top200_15m\\market_state_hist\\top_acct_ratio\\HUSDT.parquet",
+      "rows": 8641,
+      "start": "2026-05-17T16:35:00+00:00",
+      "end": "2026-06-16T16:35:00+00:00"
+    },
+    {
+      "symbol": "LABUSDT",
+      "dataset": "data/market_state_hist/top_acct_ratio",
+      "source": "..\\data\\top200_15m\\market_state_hist\\top_acct_ratio\\LABUSDT.parquet",
+      "rows": 8641,
+      "start": "2026-05-17T16:35:00+00:00",
+      "end": "2026-06-16T16:35:00+00:00"
+    },
+    {
+      "symbol": "HYPEUSDT",
+      "dataset": "data/market_state_hist/top_acct_ratio",
+      "source": "..\\data\\top200_15m\\market_state_hist\\top_acct_ratio\\HYPEUSDT.parquet",
+      "rows": 8641,
+      "start": "2026-05-17T16:35:00+00:00",
+      "end": "2026-06-16T16:35:00+00:00"
+    },
+    {
+      "symbol": "BASUSDT",
+      "dataset": "data/market_state_hist/top_acct_ratio",
+      "source": "..\\data\\top200_15m\\market_state_hist\\top_acct_ratio\\BASUSDT.parquet",
+      "rows": 8641,
+      "start": "2026-05-17T16:35:00+00:00",
+      "end": "2026-06-16T16:35:00+00:00"
+    },
+    {
+      "symbol": "1000LUNCUSDT",
+      "dataset": "data/market_state_hist/top_acct_ratio",
+      "source": "..\\data\\top200_15m\\market_state_hist\\top_acct_ratio\\1000LUNCUSDT.parquet",
+      "rows": 8641,
+      "start": "2026-05-17T16:35:00+00:00",
+      "end": "2026-06-16T16:35:00+00:00"
+    },
+    {
+      "symbol": "NEARUSDT",
+      "dataset": "data/market_state_hist/top_acct_ratio",
+      "source": "..\\data\\top200_15m\\market_state_hist\\top_acct_ratio\\NEARUSDT.parquet",
+      "rows": 8641,
+      "start": "2026-05-17T16:35:00+00:00",
+      "end": "2026-06-16T16:35:00+00:00"
+    },
+    {
+      "symbol": "MEGAUSDT",
+      "dataset": "data/market_state_hist/top_acct_ratio",
+      "source": "..\\data\\top200_15m\\market_state_hist\\top_acct_ratio\\MEGAUSDT.parquet",
+      "rows": 8641,
+      "start": "2026-05-17T16:35:00+00:00",
+      "end": "2026-06-16T16:35:00+00:00"
+    },
+    {
+      "symbol": "DASHUSDT",
+      "dataset": "data/market_state_hist/top_acct_ratio",
+      "source": "..\\data\\top200_15m\\market_state_hist\\top_acct_ratio\\DASHUSDT.parquet",
+      "rows": 8641,
+      "start": "2026-05-17T16:35:00+00:00",
+      "end": "2026-06-16T16:35:00+00:00"
+    },
+    {
+      "symbol": "NILUSDT",
+      "dataset": "data/market_state_hist/top_acct_ratio",
+      "source": "..\\data\\top200_15m\\market_state_hist\\top_acct_ratio\\NILUSDT.parquet",
+      "rows": 8641,
+      "start": "2026-05-17T16:35:00+00:00",
+      "end": "2026-06-16T16:35:00+00:00"
+    },
+    {
+      "symbol": "BABYUSDT",
+      "dataset": "data/market_state_hist/top_acct_ratio",
+      "source": "..\\data\\top200_15m\\market_state_hist\\top_acct_ratio\\BABYUSDT.parquet",
+      "rows": 8641,
+      "start": "2026-05-17T16:35:00+00:00",
+      "end": "2026-06-16T16:35:00+00:00"
+    },
+    {
+      "symbol": "FETUSDT",
+      "dataset": "data/market_state_hist/top_acct_ratio",
+      "source": "..\\data\\top200_15m\\market_state_hist\\top_acct_ratio\\FETUSDT.parquet",
+      "rows": 8641,
+      "start": "2026-05-17T16:35:00+00:00",
+      "end": "2026-06-16T16:35:00+00:00"
+    },
+    {
+      "symbol": "ARKMUSDT",
+      "dataset": "data/market_state_hist/top_acct_ratio",
+      "source": "..\\data\\top200_15m\\market_state_hist\\top_acct_ratio\\ARKMUSDT.parquet",
+      "rows": 8641,
+      "start": "2026-05-17T16:35:00+00:00",
+      "end": "2026-06-16T16:35:00+00:00"
+    },
+    {
+      "symbol": "BASEDUSDT",
+      "dataset": "data/market_state_hist/top_acct_ratio",
+      "source": "..\\data\\top200_15m\\market_state_hist\\top_acct_ratio\\BASEDUSDT.parquet",
+      "rows": 8641,
+      "start": "2026-05-17T16:35:00+00:00",
+      "end": "2026-06-16T16:35:00+00:00"
+    },
+    {
+      "symbol": "EIGENUSDT",
+      "dataset": "data/market_state_hist/top_acct_ratio",
+      "source": "..\\data\\top200_15m\\market_state_hist\\top_acct_ratio\\EIGENUSDT.parquet",
+      "rows": 8641,
+      "start": "2026-05-17T16:35:00+00:00",
+      "end": "2026-06-16T16:35:00+00:00"
+    },
+    {
+      "symbol": "ARUSDT",
+      "dataset": "data/market_state_hist/top_acct_ratio",
+      "source": "..\\data\\top200_15m\\market_state_hist\\top_acct_ratio\\ARUSDT.parquet",
+      "rows": 8641,
+      "start": "2026-05-17T16:35:00+00:00",
+      "end": "2026-06-16T16:35:00+00:00"
+    },
+    {
+      "symbol": "LITUSDT",
+      "dataset": "data/market_state_hist/top_acct_ratio",
+      "source": "..\\data\\top200_15m\\market_state_hist\\top_acct_ratio\\LITUSDT.parquet",
+      "rows": 8641,
+      "start": "2026-05-17T16:35:00+00:00",
+      "end": "2026-06-16T16:35:00+00:00"
+    },
+    {
+      "symbol": "BSBUSDT",
+      "dataset": "data/market_state_hist/top_pos_ratio",
+      "source": "..\\data\\top200_15m\\market_state_hist\\top_pos_ratio\\BSBUSDT.parquet",
+      "rows": 8641,
+      "start": "2026-05-17T16:35:00+00:00",
+      "end": "2026-06-16T16:35:00+00:00"
+    },
+    {
+      "symbol": "GWEIUSDT",
+      "dataset": "data/market_state_hist/top_pos_ratio",
+      "source": "..\\data\\top200_15m\\market_state_hist\\top_pos_ratio\\GWEIUSDT.parquet",
+      "rows": 8641,
+      "start": "2026-05-17T16:35:00+00:00",
+      "end": "2026-06-16T16:35:00+00:00"
+    },
+    {
+      "symbol": "JTOUSDT",
+      "dataset": "data/market_state_hist/top_pos_ratio",
+      "source": "..\\data\\top200_15m\\market_state_hist\\top_pos_ratio\\JTOUSDT.parquet",
+      "rows": 8641,
+      "start": "2026-05-17T16:35:00+00:00",
+      "end": "2026-06-16T16:35:00+00:00"
+    },
+    {
+      "symbol": "CLOUSDT",
+      "dataset": "data/market_state_hist/top_pos_ratio",
+      "source": "..\\data\\top200_15m\\market_state_hist\\top_pos_ratio\\CLOUSDT.parquet",
+      "rows": 8641,
+      "start": "2026-05-17T16:35:00+00:00",
+      "end": "2026-06-16T16:35:00+00:00"
+    },
+    {
+      "symbol": "HUSDT",
+      "dataset": "data/market_state_hist/top_pos_ratio",
+      "source": "..\\data\\top200_15m\\market_state_hist\\top_pos_ratio\\HUSDT.parquet",
+      "rows": 8641,
+      "start": "2026-05-17T16:35:00+00:00",
+      "end": "2026-06-16T16:35:00+00:00"
+    },
+    {
+      "symbol": "LABUSDT",
+      "dataset": "data/market_state_hist/top_pos_ratio",
+      "source": "..\\data\\top200_15m\\market_state_hist\\top_pos_ratio\\LABUSDT.parquet",
+      "rows": 8641,
+      "start": "2026-05-17T16:35:00+00:00",
+      "end": "2026-06-16T16:35:00+00:00"
+    },
+    {
+      "symbol": "HYPEUSDT",
+      "dataset": "data/market_state_hist/top_pos_ratio",
+      "source": "..\\data\\top200_15m\\market_state_hist\\top_pos_ratio\\HYPEUSDT.parquet",
+      "rows": 8641,
+      "start": "2026-05-17T16:35:00+00:00",
+      "end": "2026-06-16T16:35:00+00:00"
+    },
+    {
+      "symbol": "BASUSDT",
+      "dataset": "data/market_state_hist/top_pos_ratio",
+      "source": "..\\data\\top200_15m\\market_state_hist\\top_pos_ratio\\BASUSDT.parquet",
+      "rows": 8641,
+      "start": "2026-05-17T16:35:00+00:00",
+      "end": "2026-06-16T16:35:00+00:00"
+    },
+    {
+      "symbol": "1000LUNCUSDT",
+      "dataset": "data/market_state_hist/top_pos_ratio",
+      "source": "..\\data\\top200_15m\\market_state_hist\\top_pos_ratio\\1000LUNCUSDT.parquet",
+      "rows": 8641,
+      "start": "2026-05-17T16:35:00+00:00",
+      "end": "2026-06-16T16:35:00+00:00"
+    },
+    {
+      "symbol": "NEARUSDT",
+      "dataset": "data/market_state_hist/top_pos_ratio",
+      "source": "..\\data\\top200_15m\\market_state_hist\\top_pos_ratio\\NEARUSDT.parquet",
+      "rows": 8641,
+      "start": "2026-05-17T16:35:00+00:00",
+      "end": "2026-06-16T16:35:00+00:00"
+    },
+    {
+      "symbol": "MEGAUSDT",
+      "dataset": "data/market_state_hist/top_pos_ratio",
+      "source": "..\\data\\top200_15m\\market_state_hist\\top_pos_ratio\\MEGAUSDT.parquet",
+      "rows": 8641,
+      "start": "2026-05-17T16:35:00+00:00",
+      "end": "2026-06-16T16:35:00+00:00"
+    },
+    {
+      "symbol": "DASHUSDT",
+      "dataset": "data/market_state_hist/top_pos_ratio",
+      "source": "..\\data\\top200_15m\\market_state_hist\\top_pos_ratio\\DASHUSDT.parquet",
+      "rows": 8641,
+      "start": "2026-05-17T16:35:00+00:00",
+      "end": "2026-06-16T16:35:00+00:00"
+    },
+    {
+      "symbol": "NILUSDT",
+      "dataset": "data/market_state_hist/top_pos_ratio",
+      "source": "..\\data\\top200_15m\\market_state_hist\\top_pos_ratio\\NILUSDT.parquet",
+      "rows": 8641,
+      "start": "2026-05-17T16:35:00+00:00",
+      "end": "2026-06-16T16:35:00+00:00"
+    },
+    {
+      "symbol": "BABYUSDT",
+      "dataset": "data/market_state_hist/top_pos_ratio",
+      "source": "..\\data\\top200_15m\\market_state_hist\\top_pos_ratio\\BABYUSDT.parquet",
+      "rows": 8641,
+      "start": "2026-05-17T16:35:00+00:00",
+      "end": "2026-06-16T16:35:00+00:00"
+    },
+    {
+      "symbol": "FETUSDT",
+      "dataset": "data/market_state_hist/top_pos_ratio",
+      "source": "..\\data\\top200_15m\\market_state_hist\\top_pos_ratio\\FETUSDT.parquet",
+      "rows": 8641,
+      "start": "2026-05-17T16:35:00+00:00",
+      "end": "2026-06-16T16:35:00+00:00"
+    },
+    {
+      "symbol": "ARKMUSDT",
+      "dataset": "data/market_state_hist/top_pos_ratio",
+      "source": "..\\data\\top200_15m\\market_state_hist\\top_pos_ratio\\ARKMUSDT.parquet",
+      "rows": 8641,
+      "start": "2026-05-17T16:35:00+00:00",
+      "end": "2026-06-16T16:35:00+00:00"
+    },
+    {
+      "symbol": "BASEDUSDT",
+      "dataset": "data/market_state_hist/top_pos_ratio",
+      "source": "..\\data\\top200_15m\\market_state_hist\\top_pos_ratio\\BASEDUSDT.parquet",
+      "rows": 8641,
+      "start": "2026-05-17T16:35:00+00:00",
+      "end": "2026-06-16T16:35:00+00:00"
+    },
+    {
+      "symbol": "EIGENUSDT",
+      "dataset": "data/market_state_hist/top_pos_ratio",
+      "source": "..\\data\\top200_15m\\market_state_hist\\top_pos_ratio\\EIGENUSDT.parquet",
+      "rows": 8641,
+      "start": "2026-05-17T16:35:00+00:00",
+      "end": "2026-06-16T16:35:00+00:00"
+    },
+    {
+      "symbol": "ARUSDT",
+      "dataset": "data/market_state_hist/top_pos_ratio",
+      "source": "..\\data\\top200_15m\\market_state_hist\\top_pos_ratio\\ARUSDT.parquet",
+      "rows": 8641,
+      "start": "2026-05-17T16:35:00+00:00",
+      "end": "2026-06-16T16:35:00+00:00"
+    },
+    {
+      "symbol": "LITUSDT",
+      "dataset": "data/market_state_hist/top_pos_ratio",
+      "source": "..\\data\\top200_15m\\market_state_hist\\top_pos_ratio\\LITUSDT.parquet",
+      "rows": 8641,
+      "start": "2026-05-17T16:35:00+00:00",
+      "end": "2026-06-16T16:35:00+00:00"
+    }
+  ]
+}

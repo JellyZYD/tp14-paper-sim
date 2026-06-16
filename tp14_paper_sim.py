@@ -4,7 +4,10 @@ import argparse
 import json
 import math
 import os
+import shutil
+import subprocess
 import time
+import zipfile
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any
@@ -23,12 +26,30 @@ def utc_now() -> pd.Timestamp:
 
 
 def load_json(path: Path) -> dict[str, Any]:
-    return json.loads(path.read_text(encoding="utf-8"))
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        backup = path.with_suffix(path.suffix + ".bak")
+        if not backup.exists():
+            raise
+        payload = json.loads(backup.read_text(encoding="utf-8"))
+        write_json(path, payload)
+        return payload
 
 
 def write_json(path: Path, payload: dict[str, Any]) -> None:
+    text = json.dumps(payload, ensure_ascii=False, indent=2, default=str)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
+    tmp = path.with_name(f"{path.name}.tmp.{os.getpid()}")
+    with tmp.open("w", encoding="utf-8") as handle:
+        handle.write(text)
+        handle.flush()
+        os.fsync(handle.fileno())
+    os.replace(tmp, path)
+    backup = path.with_suffix(path.suffix + ".bak")
+    tmp_backup = backup.with_name(f"{backup.name}.tmp.{os.getpid()}")
+    tmp_backup.write_text(text, encoding="utf-8")
+    os.replace(tmp_backup, backup)
 
 
 def append_jsonl(path: Path, payload: dict[str, Any]) -> None:
@@ -94,9 +115,21 @@ def append_csv(path: Path, rows: pd.DataFrame) -> int:
     if rows.empty:
         return 0
     path.parent.mkdir(parents=True, exist_ok=True)
-    exists = path.exists()
-    rows.to_csv(path, mode="a", header=not exists, index=False)
-    return int(len(rows))
+    old = read_csv_table(path)
+    before = len(old) if not old.empty else 0
+    combined = pd.concat([old, rows], ignore_index=True) if not old.empty else rows.copy()
+    if "timestamp" in combined.columns:
+        combined["timestamp"] = pd.to_numeric(combined["timestamp"], errors="coerce").astype("Int64")
+        combined = combined.dropna(subset=["timestamp"])
+        combined["timestamp"] = combined["timestamp"].astype("int64")
+        combined = combined.drop_duplicates(subset=["timestamp"], keep="last").sort_values("timestamp")
+    tmp = path.with_name(f"{path.name}.tmp.{os.getpid()}")
+    combined.to_csv(tmp, index=False)
+    if path.exists():
+        backup = path.with_suffix(path.suffix + ".bak")
+        shutil.copy2(path, backup)
+    os.replace(tmp, path)
+    return max(int(len(combined) - before), 0)
 
 
 def normalize_timestamp_index(df: pd.DataFrame) -> pd.DataFrame:
@@ -210,17 +243,23 @@ def fetch_funding(symbol: str, start_ms: int, end_ms: int) -> pd.DataFrame:
 def fetch_hist_ratio(endpoint: str, symbol: str, start_ms: int, end_ms: int, rename: dict[str, str]) -> pd.DataFrame:
     rows: list[dict[str, Any]] = []
     cursor = start_ms
+    period_ms = INTERVAL_MS["5m"]
+    limit = 500
     while cursor < end_ms:
+        page_end = min(end_ms, cursor + (limit - 1) * period_ms)
         page = binance_get(
             endpoint,
-            {"symbol": symbol, "period": "5m", "startTime": cursor, "endTime": end_ms, "limit": 500},
+            {"symbol": symbol, "period": "5m", "startTime": cursor, "endTime": page_end, "limit": limit},
         )
         if not page:
             break
         rows.extend(page)
-        cursor = int(page[-1]["timestamp"]) + 1
-        if len(page) < 500:
+        next_cursor = int(page[-1]["timestamp"]) + period_ms
+        if next_cursor <= cursor:
             break
+        if page_end >= end_ms and len(page) < limit:
+            break
+        cursor = next_cursor
     if not rows:
         return pd.DataFrame()
     df = pd.DataFrame(rows).rename(columns=rename)
@@ -251,6 +290,7 @@ def update_one_dataset(root: Path, symbol: str, dataset: str, lookback_days: int
     elif dataset == "oi":
         step_ms = INTERVAL_MS["5m"]
         end_ms = int(utc_now().timestamp() * 1000)
+        lookback_days = min(lookback_days, 30)
         fetcher = lambda start: fetch_hist_ratio(
             "/futures/data/openInterestHist",
             symbol,
@@ -261,6 +301,7 @@ def update_one_dataset(root: Path, symbol: str, dataset: str, lookback_days: int
     elif dataset == "global_acct_ratio":
         step_ms = INTERVAL_MS["5m"]
         end_ms = int(utc_now().timestamp() * 1000)
+        lookback_days = min(lookback_days, 30)
         fetcher = lambda start: fetch_hist_ratio(
             "/futures/data/globalLongShortAccountRatio",
             symbol,
@@ -271,6 +312,7 @@ def update_one_dataset(root: Path, symbol: str, dataset: str, lookback_days: int
     elif dataset == "top_acct_ratio":
         step_ms = INTERVAL_MS["5m"]
         end_ms = int(utc_now().timestamp() * 1000)
+        lookback_days = min(lookback_days, 30)
         fetcher = lambda start: fetch_hist_ratio(
             "/futures/data/topLongShortAccountRatio",
             symbol,
@@ -281,6 +323,7 @@ def update_one_dataset(root: Path, symbol: str, dataset: str, lookback_days: int
     elif dataset == "top_pos_ratio":
         step_ms = INTERVAL_MS["5m"]
         end_ms = int(utc_now().timestamp() * 1000)
+        lookback_days = min(lookback_days, 30)
         fetcher = lambda start: fetch_hist_ratio(
             "/futures/data/topLongShortPositionRatio",
             symbol,
@@ -367,6 +410,16 @@ def safe_log(series: pd.Series) -> pd.Series:
     return np.log(series.where(series > 0))
 
 
+def coalesce_columns(frame: pd.DataFrame, target: str, aliases: tuple[str, ...]) -> pd.DataFrame:
+    present = [col for col in (target, *aliases) if col in frame.columns]
+    if not present:
+        return frame
+    out = frame.copy()
+    out[target] = out[present].bfill(axis=1).iloc[:, 0]
+    drop_cols = [col for col in aliases if col in out.columns]
+    return out.drop(columns=drop_cols)
+
+
 def build_features(root: Path, symbol: str, start: pd.Timestamp, end: pd.Timestamp) -> pd.DataFrame:
     k = read_frame(root, "signal_klines", symbol)
     if k.empty:
@@ -375,6 +428,26 @@ def build_features(root: Path, symbol: str, start: pd.Timestamp, end: pd.Timesta
     base = resample_ohlcv(k, "15min")
     for dataset in ("funding", "oi", "global_acct_ratio", "top_acct_ratio", "top_pos_ratio"):
         frame = read_frame(root, dataset, symbol)
+        if dataset == "global_acct_ratio":
+            frame = coalesce_columns(frame, "LS_Ratio", ("ratio",))
+        elif dataset == "top_acct_ratio":
+            frame = coalesce_columns(frame, "TopAccount_LS_Ratio", ("ratio",))
+        elif dataset == "top_pos_ratio":
+            frame = coalesce_columns(frame, "TopPosition_LS_Ratio", ("ratio",))
+        elif dataset == "funding":
+            frame = coalesce_columns(frame, "FundingRate", ("funding_rate",))
+        elif dataset == "oi":
+            frame = coalesce_columns(frame, "OpenInterest", ("oi",))
+            frame = coalesce_columns(frame, "OpenInterestValue", ("oi_value",))
+        frame = frame.loc[:, ~frame.columns.duplicated(keep="last")]
+        expected_cols = {
+            "funding": ("FundingRate",),
+            "oi": ("OpenInterest", "OpenInterestValue"),
+            "global_acct_ratio": ("LS_Ratio",),
+            "top_acct_ratio": ("TopAccount_LS_Ratio",),
+            "top_pos_ratio": ("TopPosition_LS_Ratio",),
+        }[dataset]
+        frame = frame[[col for col in expected_cols if col in frame.columns]]
         if not frame.empty:
             frame = frame.loc[(frame.index >= start) & (frame.index < end)]
         aligned = resample_last(frame, base.index)
@@ -728,13 +801,91 @@ def open_entries(config: dict[str, Any], state: dict[str, Any], signals: list[di
     return events
 
 
+def resolve_webhook_url(config: dict[str, Any]) -> str:
+    notifications = config.get("notifications", {})
+    if notifications and not bool(notifications.get("enabled", True)):
+        return ""
+    direct = str(notifications.get("webhook_url", "")).strip()
+    if direct:
+        return direct
+    env_name = str(notifications.get("webhook_url_env", "TP14_WEBHOOK_URL")).strip()
+    if env_name and os.environ.get(env_name):
+        return str(os.environ[env_name]).strip()
+    file_name = str(notifications.get("webhook_url_file", "")).strip()
+    if file_name:
+        path = Path(file_name)
+        if path.exists():
+            return path.read_text(encoding="utf-8").strip()
+    return ""
+
+
+def account_snapshot(state: dict[str, Any], paper_account: str) -> dict[str, Any]:
+    for account in state.get("accounts", []):
+        if account.get("paper_account") == paper_account:
+            return account
+    return {}
+
+
+def format_event_message(event: dict[str, Any], state: dict[str, Any], tick_time: pd.Timestamp) -> str:
+    account = account_snapshot(state, str(event.get("paper_account", "")))
+    equity = float(account.get("equity_usdt", event.get("account_equity_after", np.nan)))
+    open_count = len(account.get("positions", []))
+    lines = [
+        f"TP14 纸面交易 {event.get('event')} | {event.get('paper_account')} | {event.get('symbol')} {event.get('side')}",
+        f"tick_time_utc: {tick_time.isoformat()}",
+        f"equity_usdt: {equity:.4f}" if np.isfinite(equity) else "equity_usdt: n/a",
+        f"open_positions: {open_count}",
+    ]
+    if event.get("event") == "entry":
+        lines.extend(
+            [
+                f"entry_time: {event.get('entry_fill_time')}",
+                f"entry_price: {float(event.get('entry_price', np.nan)):.8g}",
+                f"margin_usdt: {float(event.get('margin_usdt', np.nan)):.4f}",
+                f"notional_usdt: {float(event.get('notional_usdt', np.nan)):.4f}",
+                f"take_profit_price: {float(event.get('take_profit_price', np.nan)):.8g}",
+                f"protective_stop_price: {float(event.get('protective_stop_price', np.nan)):.8g}",
+            ]
+        )
+    elif event.get("event") == "exit":
+        lines.extend(
+            [
+                f"exit_time: {event.get('exit_time')}",
+                f"exit_reason: {event.get('exit_reason')}",
+                f"exit_price: {float(event.get('exit_price', np.nan)):.8g}",
+                f"pnl_usdt: {float(event.get('pnl_usdt', np.nan)):.4f}",
+                f"leveraged_net_return: {float(event.get('leveraged_net_return', np.nan)):.4%}",
+            ]
+        )
+    return "\n".join(lines)
+
+
+def notify_events(config: dict[str, Any], state: dict[str, Any], tick_time: pd.Timestamp, events: list[dict[str, Any]]) -> tuple[int, str | None]:
+    webhook_url = resolve_webhook_url(config)
+    if not webhook_url or not events:
+        return 0, None
+    timeout = float(config.get("notifications", {}).get("timeout_seconds", 10.0))
+    sent = 0
+    try:
+        for event in events:
+            payload = {"msgtype": "text", "text": {"content": format_event_message(event, state, tick_time)}}
+            response = requests.post(webhook_url, json=payload, timeout=timeout)
+            response.raise_for_status()
+            sent += 1
+    except Exception as exc:
+        return sent, repr(exc)
+    return sent, None
+
+
 def acquire_lock(path: Path, stale_seconds: float = 300.0) -> bool:
     path.parent.mkdir(parents=True, exist_ok=True)
     now = time.time()
     if path.exists():
         try:
             payload = load_json(path)
-            if now - float(payload.get("timestamp", 0.0)) < stale_seconds:
+            timestamp = float(payload.get("timestamp", 0.0))
+            pid = int(payload.get("pid", 0))
+            if now - timestamp < stale_seconds and pid_is_running(pid):
                 return False
         except Exception:
             pass
@@ -746,6 +897,26 @@ def acquire_lock(path: Path, stale_seconds: float = 300.0) -> bool:
     with os.fdopen(fd, "w", encoding="utf-8") as handle:
         json.dump({"pid": os.getpid(), "timestamp": now, "started_at": utc_now().isoformat()}, handle, indent=2)
     return True
+
+
+def pid_is_running(pid: int) -> bool:
+    if pid <= 0:
+        return False
+    if os.name == "nt":
+        result = subprocess.run(
+            ["tasklist", "/FI", f"PID eq {pid}", "/FO", "CSV", "/NH"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        return str(pid) in result.stdout
+    try:
+        os.kill(pid, 0)
+        return True
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
 
 
 def release_lock(path: Path) -> None:
@@ -782,7 +953,12 @@ def run_tick(config: dict[str, Any]) -> dict[str, Any]:
         for event in events:
             append_jsonl(run_dir / "events.jsonl", {"tick_time": tick_time.isoformat(), **event})
         write_json(state_path, state)
+        notified, webhook_error = notify_events(config, state, tick_time, events)
         last_tick = {"last_tick": state["last_tick"], "signals": signals, "events": events}
+        last_tick["last_tick"]["notified"] = notified
+        if webhook_error:
+            last_tick["last_tick"]["webhook_error"] = webhook_error
+            append_log(run_dir / "paper_loop.log", f"{utc_now().isoformat()} WEBHOOK_ERROR {webhook_error}")
         write_json(run_dir / "last_tick.json", last_tick)
         return last_tick
     finally:
@@ -790,6 +966,10 @@ def run_tick(config: dict[str, Any]) -> dict[str, Any]:
 
 
 def bootstrap(config: dict[str, Any], workers: int | None = None, force_state: bool = False) -> None:
+    seed_archive = Path("bootstrap_seed") / "tp14_seed.zip"
+    if not has_signal_data(config) and seed_archive.exists():
+        seed_from_archive(config, seed_archive, force_state=force_state)
+        return
     execution = config["execution"]
     max_workers = int(workers or execution["workers"])
     datasets = {
@@ -806,6 +986,34 @@ def bootstrap(config: dict[str, Any], workers: int | None = None, force_state: b
     run_dir.mkdir(parents=True, exist_ok=True)
     pd.DataFrame(rows).to_csv(run_dir / "bootstrap_update_report.csv", index=False)
     init_state(config, force=force_state)
+
+
+def seed_from_archive(config: dict[str, Any], archive: Path | None = None, force_state: bool = False) -> None:
+    archive_path = archive or Path("bootstrap_seed") / "tp14_seed.zip"
+    if not archive_path.exists():
+        raise FileNotFoundError(f"Missing seed archive: {archive_path}")
+    with zipfile.ZipFile(archive_path, "r") as zf:
+        zf.extractall(Path("."))
+    init_state(config, force=force_state)
+
+
+def has_signal_data(config: dict[str, Any]) -> bool:
+    root, _ = config_paths(config)
+    return any(table_path(root, "signal_klines", symbol).exists() for symbol in config["symbols"])
+
+
+def start(config: dict[str, Any], workers: int | None = None, force_state: bool = False, max_iterations: int = 0) -> None:
+    if not has_signal_data(config):
+        seed_from_archive(config, force_state=force_state)
+    else:
+        init_state(config, force=force_state)
+    update_many(
+        config,
+        {"signal_klines", "exec_klines", "funding", "oi", "global_acct_ratio", "top_acct_ratio", "top_pos_ratio"},
+        2,
+        int(workers or config["execution"]["workers"]),
+    )
+    loop(config, max_iterations=max_iterations)
 
 
 def loop(config: dict[str, Any], max_iterations: int = 0) -> None:
@@ -852,11 +1060,12 @@ def loop(config: dict[str, Any], max_iterations: int = 0) -> None:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="TP14 deploy-only paper simulation bot.")
-    parser.add_argument("command", choices=("bootstrap", "tick", "loop", "init-state"))
+    parser.add_argument("command", choices=("bootstrap", "seed", "start", "tick", "loop", "init-state"))
     parser.add_argument("--config", default="config/paper_config.json")
     parser.add_argument("--workers", type=int, default=None)
     parser.add_argument("--force-state", action="store_true")
     parser.add_argument("--max-iterations", type=int, default=0)
+    parser.add_argument("--seed-archive", default=None)
     return parser.parse_args()
 
 
@@ -865,6 +1074,10 @@ def main() -> None:
     config = load_json(Path(args.config))
     if args.command == "bootstrap":
         bootstrap(config, args.workers, args.force_state)
+    elif args.command == "seed":
+        seed_from_archive(config, Path(args.seed_archive) if args.seed_archive else None, args.force_state)
+    elif args.command == "start":
+        start(config, args.workers, args.force_state, args.max_iterations)
     elif args.command == "init-state":
         init_state(config, args.force_state)
     elif args.command == "tick":
