@@ -2,24 +2,24 @@
   "symbols": [
     "RIFUSDT",
     "ALLOUSDT",
-    "JTOUSDT",
-    "GUAUSDT",
     "STGUSDT",
-    "SKYAIUSDT",
+    "JTOUSDT",
     "CLOUSDT",
+    "GUAUSDT",
     "WLDUSDT",
-    "PLAYUSDT",
-    "HUSDT",
     "BSBUSDT",
     "BEATUSDT",
+    "SKYAIUSDT",
+    "PLAYUSDT",
     "UAIUSDT",
+    "HUSDT",
     "VELVETUSDT",
-    "ESPORTSUSDT",
     "NILUSDT",
-    "MAGMAUSDT",
+    "ESPORTSUSDT",
+    "MYXUSDT",
     "FETUSDT",
     "SPACEUSDT",
-    "BASEDUSDT"
+    "MAGMAUSDT"
   ],
   "accounts": [
     {
