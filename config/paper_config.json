@@ -56,7 +56,8 @@
     "maintenance_margin_rate": 0.005,
     "liquidation_buffer_pct": 0.005,
     "state_update_interval_minutes": 5,
-    "funding_update_interval_minutes": 60
+    "funding_update_interval_minutes": 60,
+    "rate_limit_backoff_minutes": 60
   },
   "notifications": {
     "enabled": true,

@@ -373,6 +373,42 @@ def update_many(config: dict[str, Any], datasets: set[str], lookback_days: int, 
     return rows
 
 
+def is_rate_limited(rows: list[dict[str, Any]]) -> bool:
+    for row in rows:
+        text = " ".join(str(value) for value in row.values())
+        if "HTTPError" in text and (" 418 " in text or " 429 " in text or "I'm a teapot" in text or "Too Many Requests" in text):
+            return True
+    return False
+
+
+def rate_limit_backoff_path(config: dict[str, Any]) -> Path:
+    _, run_dir = config_paths(config)
+    return run_dir / "rate_limit_backoff.json"
+
+
+def read_backoff_until(config: dict[str, Any]) -> float:
+    path = rate_limit_backoff_path(config)
+    if not path.exists():
+        return 0.0
+    try:
+        payload = load_json(path)
+        return float(payload.get("backoff_until", 0.0))
+    except Exception:
+        return 0.0
+
+
+def write_backoff_until(config: dict[str, Any], backoff_until: float, reason: str) -> None:
+    write_json(
+        rate_limit_backoff_path(config),
+        {
+            "backoff_until": backoff_until,
+            "backoff_until_utc": pd.Timestamp.fromtimestamp(backoff_until, tz="UTC").isoformat(),
+            "reason": reason,
+            "updated_at": utc_now().isoformat(),
+        },
+    )
+
+
 def read_frame(root: Path, dataset: str, symbol: str) -> pd.DataFrame:
     return normalize_timestamp_index(read_csv_table(table_path(root, dataset, symbol)))
 
@@ -765,7 +801,10 @@ def open_entries(config: dict[str, Any], state: dict[str, Any], signals: list[di
                 continue
             if on_cooldown(account, symbol, tick_time, cooldown_bars):
                 continue
-            fill_time, fill_price = latest_fill_price(config, symbol, tick_time)
+            try:
+                fill_time, fill_price = latest_fill_price(config, symbol, tick_time)
+            except RuntimeError:
+                continue
             direction = float(signal["direction"])
             margin = float(account["equity_usdt"]) * float(account["position_margin_pct"])
             notional = margin * float(account["leverage"])
@@ -1007,12 +1046,20 @@ def start(config: dict[str, Any], workers: int | None = None, force_state: bool 
         seed_from_archive(config, force_state=force_state)
     else:
         init_state(config, force=force_state)
-    update_many(
-        config,
-        {"signal_klines", "exec_klines", "funding", "oi", "global_acct_ratio", "top_acct_ratio", "top_pos_ratio"},
-        2,
-        int(workers or config["execution"]["workers"]),
-    )
+    backoff_until = read_backoff_until(config)
+    if time.time() < backoff_until:
+        _, run_dir = config_paths(config)
+        append_log(run_dir / "paper_loop.log", f"{utc_now().isoformat()} START_BACKOFF_SKIP_REFRESH remaining_seconds={backoff_until - time.time():.0f}")
+    else:
+        rows = update_many(
+            config,
+            {"signal_klines", "exec_klines", "funding", "oi", "global_acct_ratio", "top_acct_ratio", "top_pos_ratio"},
+            2,
+            int(workers or config["execution"]["workers"]),
+        )
+        if is_rate_limited(rows):
+            backoff_minutes = float(config["execution"].get("rate_limit_backoff_minutes", 60.0))
+            write_backoff_until(config, time.time() + backoff_minutes * 60.0, "binance_418_or_429_start")
     loop(config, max_iterations=max_iterations)
 
 
@@ -1025,6 +1072,7 @@ def loop(config: dict[str, Any], max_iterations: int = 0) -> None:
     append_log(log_path, f"START {utc_now().isoformat()} pid={os.getpid()}")
     last_state_update = 0.0
     last_funding_update = 0.0
+    rate_limit_backoff_until = read_backoff_until(config)
     iteration = 0
     try:
         while True:
@@ -1037,7 +1085,17 @@ def loop(config: dict[str, Any], max_iterations: int = 0) -> None:
             if started - last_funding_update >= float(config["execution"]["funding_update_interval_minutes"]) * 60:
                 datasets.add("funding")
                 last_funding_update = started
-            rows = update_many(config, datasets, 2, int(config["execution"]["workers"]))
+            if time.time() < rate_limit_backoff_until:
+                remaining = rate_limit_backoff_until - time.time()
+                rows = []
+                append_log(log_path, f"{utc_now().isoformat()} RATE_LIMIT_BACKOFF remaining_seconds={remaining:.0f}")
+            else:
+                rows = update_many(config, datasets, 2, int(config["execution"]["workers"]))
+                if is_rate_limited(rows):
+                    backoff_minutes = float(config["execution"].get("rate_limit_backoff_minutes", 60.0))
+                    rate_limit_backoff_until = time.time() + backoff_minutes * 60.0
+                    write_backoff_until(config, rate_limit_backoff_until, "binance_418_or_429_loop")
+                    append_log(log_path, f"{utc_now().isoformat()} RATE_LIMIT_DETECTED backoff_minutes={backoff_minutes}")
             failed = [row for row in rows if not row.get("ok")]
             append_log(log_path, f"{utc_now().isoformat()} UPDATE datasets={','.join(sorted(datasets))} failed={len(failed)}")
             if failed:
