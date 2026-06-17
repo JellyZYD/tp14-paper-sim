@@ -586,7 +586,7 @@ def compute_signal_context(
     return data, thresholds, extra_gate, train_start, train_end
 
 
-def latest_common_complete_15m_end(config: dict[str, Any]) -> pd.Timestamp:
+def latest_common_complete_15m_end(config: dict[str, Any], as_of: pd.Timestamp | None = None) -> pd.Timestamp:
     root, _ = config_paths(config)
     ends = []
     for symbol in config["symbols"]:
@@ -595,7 +595,11 @@ def latest_common_complete_15m_end(config: dict[str, Any]) -> pd.Timestamp:
             ends.append(df.index.max() + pd.Timedelta(minutes=15))
     if not ends:
         raise RuntimeError("No local 15m signal data. Run bootstrap first.")
-    return min(ends).floor("15min")
+    data_complete_end = min(ends).floor("15min")
+    if as_of is None:
+        return data_complete_end
+    time_complete_end = pd.Timestamp(as_of).floor("15min")
+    return min(data_complete_end, time_complete_end)
 
 
 def latest_fill_price(config: dict[str, Any], symbol: str, as_of: pd.Timestamp) -> tuple[pd.Timestamp, float]:
@@ -1097,7 +1101,7 @@ def run_tick(config: dict[str, Any]) -> dict[str, Any]:
         state_path = run_dir / "paper_state.json"
         state = init_state(config, force=False) if not state_path.exists() else load_json(state_path)
         tick_time = utc_now()
-        complete_end = latest_common_complete_15m_end(config)
+        complete_end = latest_common_complete_15m_end(config, tick_time)
         exits = check_exits(config, state, tick_time)
         signals, meta = compute_signals(config, state, complete_end)
         reverses = apply_reverse_signals(config, state, signals, tick_time)

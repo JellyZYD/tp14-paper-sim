@@ -36,6 +36,7 @@ python tp14_paper_sim.py start --config config/paper_config.json
 - Execution data: 1m OHLCV only, used for fixed 14% TP and protective stop checks.
 - Entry: `OI_Expansion_48` gate plus `whale_fade` resolver.
 - Signal lag: 1 closed 15m bar. No future bar is used.
+- Signal clock: `complete_15m_end` is capped by the current UTC clock floored to 15 minutes, so an in-progress 15m kline cannot be treated as complete.
 - Thresholds: fixed from `runs/tp14/paper_state.json` `preflight.training_start` / `training_end` for the current paper cycle. They are not recomputed from a rolling window on every tick.
 - Accounts: robust 5% margin at 10x and high-risk 10% margin at 10x.
 
