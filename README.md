@@ -21,6 +21,24 @@ export TP14_WEBHOOK_URL='https://...'
 bash deploy_pm2.sh
 ```
 
+Optional abnormal-only hourly health monitor:
+
+```bash
+chmod +x ensure_tp14_paper_loop.sh
+./ensure_tp14_paper_loop.sh
+crontab -e
+```
+
+Add this cron entry:
+
+```cron
+0 * * * * cd /root/tp14-paper-sim && /root/tp14-paper-sim/ensure_tp14_paper_loop.sh >/dev/null 2>&1
+```
+
+The monitor is silent when healthy. It only sends a webhook when the health
+check is abnormal or pm2 needs to be restarted. Entry/exit notifications are
+still sent by the trading loop itself.
+
 For Windows:
 
 ```powershell
@@ -57,6 +75,12 @@ Run one tick:
 
 ```bash
 python tp14_paper_sim.py tick --config config/paper_config.json
+```
+
+Run a silent health check:
+
+```bash
+python tp14_paper_sim.py health --config config/paper_config.json --no-webhook
 ```
 
 Run forever:

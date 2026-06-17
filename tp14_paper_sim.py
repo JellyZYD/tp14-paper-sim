@@ -1041,6 +1041,146 @@ def notify_events(config: dict[str, Any], state: dict[str, Any], tick_time: pd.T
     return sent, None
 
 
+def notify_text(config: dict[str, Any], content: str) -> tuple[bool, str | None]:
+    webhook_url = resolve_webhook_url(config)
+    if not webhook_url:
+        return False, "webhook_not_configured"
+    timeout = float(config.get("notifications", {}).get("timeout_seconds", 10.0))
+    try:
+        response = requests.post(webhook_url, json={"msgtype": "text", "text": {"content": content}}, timeout=timeout)
+        response.raise_for_status()
+        return True, None
+    except Exception as exc:
+        return False, repr(exc)
+
+
+def load_json_optional(path: Path) -> dict[str, Any]:
+    for candidate in (path, path.with_suffix(path.suffix + ".bak")):
+        if not candidate.exists():
+            continue
+        try:
+            return json.loads(candidate.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+    return {}
+
+
+def parse_timestamp(value: Any) -> pd.Timestamp | None:
+    if not value:
+        return None
+    try:
+        ts = pd.Timestamp(value)
+        return ts.tz_localize("UTC") if ts.tzinfo is None else ts.tz_convert("UTC")
+    except Exception:
+        return None
+
+
+def tail_text_lines(path: Path, count: int) -> list[str]:
+    if not path.exists():
+        return []
+    return path.read_text(encoding="utf-8", errors="replace").splitlines()[-count:]
+
+
+def health_report(config: dict[str, Any], max_heartbeat_age_minutes: float, max_tick_age_minutes: float) -> tuple[dict[str, Any], str]:
+    _, run_dir = config_paths(config)
+    now = utc_now()
+    state = load_json_optional(run_dir / "paper_state.json")
+    heartbeat = load_json_optional(run_dir / "paper_loop.heartbeat.json")
+    last_tick_payload = load_json_optional(run_dir / "last_tick.json").get("last_tick", {})
+    backoff = load_json_optional(run_dir / "rate_limit_backoff.json")
+    log_tail = tail_text_lines(run_dir / "paper_loop.log", 200)
+
+    hb_ts = parse_timestamp(heartbeat.get("updated_at"))
+    tick_ts = parse_timestamp(last_tick_payload.get("tick_time"))
+    hb_age = float((now - hb_ts).total_seconds() / 60.0) if hb_ts is not None else None
+    tick_age = float((now - tick_ts).total_seconds() / 60.0) if tick_ts is not None else None
+    backoff_until = float(backoff.get("backoff_until", 0.0)) if backoff else 0.0
+    backoff_remaining = max((backoff_until - now.timestamp()) / 60.0, 0.0) if backoff_until else 0.0
+
+    recent_errors = [line for line in log_tail if " ERROR " in line or "Traceback" in line or "JSONDecodeError" in line]
+    recent_warnings = [
+        line
+        for line in log_tail
+        if "UPDATE_FAILED" in line or "RATE_LIMIT" in line or " 418 " in line or " 429 " in line or "Too Many Requests" in line
+    ]
+
+    accounts = []
+    total_open = 0
+    total_trades = 0
+    for account in state.get("accounts", []):
+        positions = account.get("positions", [])
+        trades = account.get("trades", [])
+        total_open += len(positions)
+        total_trades += len(trades)
+        accounts.append(
+            {
+                "paper_account": account.get("paper_account"),
+                "equity_usdt": float(account.get("equity_usdt", 0.0)),
+                "open_positions": len(positions),
+                "closed_trades": len(trades),
+                "open_symbols": [position.get("symbol") for position in positions],
+            }
+        )
+
+    healthy = True
+    reasons: list[str] = []
+    if not heartbeat:
+        healthy = False
+        reasons.append("missing_heartbeat")
+    elif hb_age is None or hb_age > max_heartbeat_age_minutes:
+        healthy = False
+        reasons.append(f"stale_heartbeat_minutes={hb_age}")
+    if not last_tick_payload:
+        healthy = False
+        reasons.append("missing_last_tick")
+    elif tick_age is None or tick_age > max_tick_age_minutes:
+        healthy = False
+        reasons.append(f"stale_last_tick_minutes={tick_age}")
+    if recent_errors:
+        reasons.append(f"recent_error_lines={len(recent_errors)}")
+    if backoff_remaining > 0:
+        reasons.append(f"rate_limit_backoff_remaining_minutes={backoff_remaining:.1f}")
+
+    summary = {
+        "checked_at": now.isoformat(),
+        "healthy": healthy,
+        "reasons": reasons,
+        "heartbeat_age_minutes": hb_age,
+        "last_tick_age_minutes": tick_age,
+        "last_tick": last_tick_payload,
+        "accounts": accounts,
+        "total_open_positions": total_open,
+        "total_closed_trades": total_trades,
+        "recent_log_errors": recent_errors[-5:],
+        "recent_log_warnings": recent_warnings[-5:],
+        "rate_limit_backoff_remaining_minutes": backoff_remaining,
+    }
+
+    lines = [
+        f"TP14 server paper health: {'healthy' if healthy else 'unhealthy'}",
+        f"checked_at_utc: {summary['checked_at']}",
+        f"heartbeat_age_min: {hb_age:.2f}" if hb_age is not None else "heartbeat_age_min: n/a",
+        f"last_tick_age_min: {tick_age:.2f}" if tick_age is not None else "last_tick_age_min: n/a",
+        (
+            "last_tick: "
+            f"signals={last_tick_payload.get('signals')} "
+            f"entries={last_tick_payload.get('entries')} "
+            f"exits={last_tick_payload.get('exits')}"
+        ),
+        f"open_positions: {total_open}",
+        f"closed_trades: {total_trades}",
+    ]
+    if reasons:
+        lines.append("reasons: " + "; ".join(reasons))
+    for account in accounts:
+        lines.append(
+            f"{account['paper_account']}: equity={account['equity_usdt']:.4f} "
+            f"open={account['open_positions']} trades={account['closed_trades']} "
+            f"symbols={','.join(str(symbol) for symbol in account['open_symbols'])}"
+        )
+    return summary, "\n".join(lines)
+
+
 def acquire_lock(path: Path, stale_seconds: float = 300.0) -> bool:
     path.parent.mkdir(parents=True, exist_ok=True)
     now = time.time()
@@ -1244,12 +1384,18 @@ def loop(config: dict[str, Any], max_iterations: int = 0) -> None:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="TP14 deploy-only paper simulation bot.")
-    parser.add_argument("command", choices=("bootstrap", "seed", "start", "tick", "loop", "init-state"))
+    parser.add_argument("command", choices=("bootstrap", "seed", "start", "tick", "loop", "init-state", "health", "notify-text"))
     parser.add_argument("--config", default="config/paper_config.json")
     parser.add_argument("--workers", type=int, default=None)
     parser.add_argument("--force-state", action="store_true")
     parser.add_argument("--max-iterations", type=int, default=0)
     parser.add_argument("--seed-archive", default=None)
+    parser.add_argument("--max-heartbeat-age-minutes", type=float, default=5.0)
+    parser.add_argument("--max-tick-age-minutes", type=float, default=20.0)
+    parser.add_argument("--no-fail", action="store_true")
+    parser.add_argument("--no-webhook", action="store_true")
+    parser.add_argument("--json", action="store_true")
+    parser.add_argument("--message", default="")
     return parser.parse_args()
 
 
@@ -1269,6 +1415,25 @@ def main() -> None:
         print(json.dumps(result.get("last_tick", result), ensure_ascii=False, indent=2, default=str))
     elif args.command == "loop":
         loop(config, args.max_iterations)
+    elif args.command == "health":
+        summary, text = health_report(config, args.max_heartbeat_age_minutes, args.max_tick_age_minutes)
+        if args.json:
+            print(json.dumps(summary, ensure_ascii=False, indent=2, default=str))
+        else:
+            print(text)
+        if not args.no_webhook and not summary["healthy"]:
+            ok, error = notify_text(config, text)
+            if not ok:
+                print(f"WEBHOOK_ERROR {error}", file=sys.stderr)
+        raise SystemExit(0 if args.no_fail or summary["healthy"] else 2)
+    elif args.command == "notify-text":
+        if not args.message:
+            raise SystemExit("--message is required for notify-text")
+        ok, error = notify_text(config, args.message)
+        if not ok:
+            print(f"WEBHOOK_ERROR {error}", file=sys.stderr)
+            raise SystemExit(2)
+        print("notified=1")
 
 
 if __name__ == "__main__":
