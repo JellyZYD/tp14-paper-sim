@@ -605,6 +605,31 @@ def take_profit_price(entry_price: float, side: float, pct: float) -> float:
     return float(entry_price * (1.0 + pct)) if side > 0 else float(entry_price * (1.0 - pct))
 
 
+def funding_return_between(
+    config: dict[str, Any],
+    position: dict[str, Any],
+    exit_time: pd.Timestamp,
+    funding_cutoff_time: pd.Timestamp | None = None,
+) -> float:
+    root, _ = config_paths(config)
+    rates_frame = read_frame(root, "funding", str(position["symbol"]))
+    if rates_frame.empty:
+        return 0.0
+    rate_col = "FundingRate" if "FundingRate" in rates_frame.columns else "funding_rate"
+    if rate_col not in rates_frame.columns:
+        return 0.0
+    rates = pd.to_numeric(rates_frame[rate_col], errors="coerce").dropna()
+    if rates.empty:
+        return 0.0
+    entry_time = pd.Timestamp(position["entry_fill_time"])
+    cutoff = pd.Timestamp(funding_cutoff_time) if funding_cutoff_time is not None else pd.Timestamp(exit_time)
+    side = side_float(str(position["side"]))
+    window = rates.loc[(rates.index >= entry_time) & (rates.index < cutoff)]
+    if window.empty:
+        return 0.0
+    return float((-side * window).sum())
+
+
 def protective_stop_price(entry_price: float, side: float, config: dict[str, Any]) -> float:
     execution = config["execution"]
     leverage = float(config["accounts"][0]["leverage"])
@@ -669,11 +694,13 @@ def close_position(
     exit_time: pd.Timestamp,
     exit_price: float,
     reason: str,
+    funding_return: float = 0.0,
 ) -> dict[str, Any]:
     side = side_float(position["side"])
     fee = float(config["execution"]["tx_cost_bps"]) / 10_000.0
     gross_return = side * (exit_price / float(position["entry_price"]) - 1.0)
-    net_return = gross_return - 2.0 * fee
+    fee_return = 2.0 * fee
+    net_return = gross_return - fee_return + funding_return
     leveraged = float(position["leverage"]) * net_return
     pnl = float(position["margin_usdt"]) * leveraged
     account["equity_usdt"] = float(account["equity_usdt"]) + pnl
@@ -684,6 +711,8 @@ def close_position(
         "exit_price": float(exit_price),
         "exit_reason": reason,
         "gross_return": float(gross_return),
+        "fee_return": float(fee_return),
+        "funding_return": float(funding_return),
         "net_return": float(net_return),
         "leveraged_net_return": float(leveraged),
         "pnl_usdt": float(pnl),
@@ -712,7 +741,12 @@ def check_exits(config: dict[str, Any], state: dict[str, Any], tick_time: pd.Tim
                 bar_low = float(row["low"])
                 stop_fill = fill_stop_price(side, float(position["protective_stop_price"]), bar_open, bar_low, bar_high)
                 if stop_fill is not None:
-                    exit_event = {"time": pd.Timestamp(ts) + pd.Timedelta(minutes=1), "price": stop_fill, "reason": "protective_stop"}
+                    exit_event = {
+                        "time": pd.Timestamp(ts) + pd.Timedelta(minutes=1),
+                        "price": stop_fill,
+                        "reason": "protective_stop",
+                        "funding_cutoff_time": pd.Timestamp(ts),
+                    }
                     break
                 tp_fill = None
                 if side > 0 and bar_high >= float(position["take_profit_price"]):
@@ -720,7 +754,12 @@ def check_exits(config: dict[str, Any], state: dict[str, Any], tick_time: pd.Tim
                 elif side < 0 and bar_low <= float(position["take_profit_price"]):
                     tp_fill = bar_open if bar_open <= float(position["take_profit_price"]) else float(position["take_profit_price"])
                 if tp_fill is not None:
-                    exit_event = {"time": pd.Timestamp(ts) + pd.Timedelta(minutes=1), "price": float(tp_fill), "reason": "intrabar_take_profit"}
+                    exit_event = {
+                        "time": pd.Timestamp(ts) + pd.Timedelta(minutes=1),
+                        "price": float(tp_fill),
+                        "reason": "intrabar_take_profit",
+                        "funding_cutoff_time": pd.Timestamp(ts),
+                    }
                     break
             if exit_event is None and tick_time - pd.Timestamp(position["entry_fill_time"]) >= pd.Timedelta(hours=max_hold_hours):
                 fill_time, fill_price = latest_fill_price(config, symbol, tick_time)
@@ -729,7 +768,21 @@ def check_exits(config: dict[str, Any], state: dict[str, Any], tick_time: pd.Tim
                 position["last_checked_time"] = tick_time.isoformat()
                 remaining.append(position)
             else:
-                trade = close_position(config, account, position, pd.Timestamp(exit_event["time"]), float(exit_event["price"]), str(exit_event["reason"]))
+                funding_return = funding_return_between(
+                    config,
+                    position,
+                    pd.Timestamp(exit_event["time"]),
+                    pd.Timestamp(exit_event.get("funding_cutoff_time", exit_event["time"])),
+                )
+                trade = close_position(
+                    config,
+                    account,
+                    position,
+                    pd.Timestamp(exit_event["time"]),
+                    float(exit_event["price"]),
+                    str(exit_event["reason"]),
+                    funding_return,
+                )
                 events.append({"event": "exit", "paper_account": account["paper_account"], **trade})
         account["positions"] = remaining
     return events
@@ -788,6 +841,80 @@ def compute_signals(config: dict[str, Any], complete_end: pd.Timestamp) -> tuple
     return signals, {"extra_entry_gate": extra_gate, "threshold_symbols": len(thresholds)}
 
 
+def build_position_from_signal(
+    config: dict[str, Any],
+    account: dict[str, Any],
+    signal: dict[str, Any],
+    tick_time: pd.Timestamp,
+    fill_time: pd.Timestamp,
+    fill_price: float,
+) -> dict[str, Any]:
+    direction = float(signal["direction"])
+    margin = float(account["equity_usdt"]) * float(account["position_margin_pct"])
+    notional = margin * float(account["leverage"])
+    return {
+        "symbol": signal["symbol"],
+        "side": side_name(direction),
+        "direction": direction,
+        "entry_fill_time": fill_time.isoformat(),
+        "entry_decision_time": tick_time.isoformat(),
+        "entry_bar_start": signal["entry_bar_start"],
+        "entry_bar_end": signal["entry_bar_end"],
+        "signal_bar_start": signal["signal_bar_start"],
+        "signal_bar_end": signal["signal_bar_end"],
+        "entry_price": float(fill_price),
+        "theoretical_entry_close": float(signal["theoretical_entry_close"]),
+        "margin_usdt": float(margin),
+        "notional_usdt": float(notional),
+        "quantity": float(notional / fill_price) if fill_price > 0 else 0.0,
+        "leverage": float(account["leverage"]),
+        "position_margin_pct": float(account["position_margin_pct"]),
+        "take_profit_pct": float(account["take_profit_pct"]),
+        "take_profit_price": take_profit_price(fill_price, direction, float(account["take_profit_pct"])),
+        "protective_stop_price": protective_stop_price(fill_price, direction, config),
+        "tx_cost_bps": float(config["execution"]["tx_cost_bps"]),
+        "last_checked_time": fill_time.isoformat(),
+        "signal_gate": signal["signal_gate"],
+        "signal_raw": signal["signal_raw"],
+    }
+
+
+def apply_reverse_signals(config: dict[str, Any], state: dict[str, Any], signals: list[dict[str, Any]], tick_time: pd.Timestamp) -> list[dict[str, Any]]:
+    events: list[dict[str, Any]] = []
+    signal_by_symbol = {str(signal["symbol"]): signal for signal in signals}
+    cooldown = pd.Timedelta(minutes=15 * int(config["entry_model"]["cooldown_bars"]))
+    for account in state["accounts"]:
+        account.setdefault("processed_signal_keys", [])
+        remaining: list[dict[str, Any]] = []
+        for position in account.get("positions", []):
+            symbol = str(position["symbol"])
+            signal = signal_by_symbol.get(symbol)
+            if signal is None or float(signal["direction"]) != -side_float(str(position["side"])):
+                remaining.append(position)
+                continue
+            key = signal_key(signal)
+            if key in account["processed_signal_keys"]:
+                remaining.append(position)
+                continue
+            if tick_time - pd.Timestamp(position["entry_fill_time"]) <= cooldown:
+                remaining.append(position)
+                continue
+            try:
+                fill_time, fill_price = latest_fill_price(config, symbol, tick_time)
+            except RuntimeError:
+                remaining.append(position)
+                continue
+            funding_return = funding_return_between(config, position, fill_time, fill_time)
+            trade = close_position(config, account, position, fill_time, fill_price, "reverse", funding_return)
+            events.append({"event": "exit", "paper_account": account["paper_account"], **trade})
+            new_position = build_position_from_signal(config, account, signal, tick_time, fill_time, fill_price)
+            remaining.append(new_position)
+            account["processed_signal_keys"].append(key)
+            events.append({"event": "entry", "paper_account": account["paper_account"], **new_position})
+        account["positions"] = remaining
+    return events
+
+
 def open_entries(config: dict[str, Any], state: dict[str, Any], signals: list[dict[str, Any]], tick_time: pd.Timestamp) -> list[dict[str, Any]]:
     events: list[dict[str, Any]] = []
     cooldown_bars = int(config["entry_model"]["cooldown_bars"])
@@ -805,34 +932,7 @@ def open_entries(config: dict[str, Any], state: dict[str, Any], signals: list[di
                 fill_time, fill_price = latest_fill_price(config, symbol, tick_time)
             except RuntimeError:
                 continue
-            direction = float(signal["direction"])
-            margin = float(account["equity_usdt"]) * float(account["position_margin_pct"])
-            notional = margin * float(account["leverage"])
-            position = {
-                "symbol": symbol,
-                "side": side_name(direction),
-                "direction": direction,
-                "entry_fill_time": fill_time.isoformat(),
-                "entry_decision_time": tick_time.isoformat(),
-                "entry_bar_start": signal["entry_bar_start"],
-                "entry_bar_end": signal["entry_bar_end"],
-                "signal_bar_start": signal["signal_bar_start"],
-                "signal_bar_end": signal["signal_bar_end"],
-                "entry_price": float(fill_price),
-                "theoretical_entry_close": float(signal["theoretical_entry_close"]),
-                "margin_usdt": float(margin),
-                "notional_usdt": float(notional),
-                "quantity": float(notional / fill_price) if fill_price > 0 else 0.0,
-                "leverage": float(account["leverage"]),
-                "position_margin_pct": float(account["position_margin_pct"]),
-                "take_profit_pct": float(account["take_profit_pct"]),
-                "take_profit_price": take_profit_price(fill_price, direction, float(account["take_profit_pct"])),
-                "protective_stop_price": protective_stop_price(fill_price, direction, config),
-                "tx_cost_bps": float(config["execution"]["tx_cost_bps"]),
-                "last_checked_time": fill_time.isoformat(),
-                "signal_gate": signal["signal_gate"],
-                "signal_raw": signal["signal_raw"],
-            }
+            position = build_position_from_signal(config, account, signal, tick_time, fill_time, fill_price)
             account.setdefault("positions", []).append(position)
             account["processed_signal_keys"].append(key)
             open_symbols.add(symbol)
@@ -979,16 +1079,17 @@ def run_tick(config: dict[str, Any]) -> dict[str, Any]:
         complete_end = latest_common_complete_15m_end(config)
         exits = check_exits(config, state, tick_time)
         signals, meta = compute_signals(config, complete_end)
+        reverses = apply_reverse_signals(config, state, signals, tick_time)
         entries = open_entries(config, state, signals, tick_time)
         state["last_tick"] = {
             "tick_time": tick_time.isoformat(),
             "complete_15m_end": complete_end.isoformat(),
             "signals": len(signals),
-            "entries": len(entries),
-            "exits": len(exits),
+            "entries": len([event for event in reverses + entries if event.get("event") == "entry"]),
+            "exits": len([event for event in exits + reverses if event.get("event") == "exit"]),
             **meta,
         }
-        events = exits + entries
+        events = exits + reverses + entries
         for event in events:
             append_jsonl(run_dir / "events.jsonl", {"tick_time": tick_time.isoformat(), **event})
         write_json(state_path, state)
