@@ -540,13 +540,27 @@ def resolver_raw(df: pd.DataFrame) -> pd.Series:
     return -df["WhalePosition_Retail_Divergence"]
 
 
+def state_training_window(state: dict[str, Any]) -> tuple[pd.Timestamp, pd.Timestamp]:
+    preflight = state.get("preflight", {})
+    if "training_start" not in preflight or "training_end" not in preflight:
+        raise RuntimeError("paper_state preflight.training_start/training_end are required for fixed-window thresholds")
+    train_start = pd.Timestamp(preflight["training_start"])
+    train_end = pd.Timestamp(preflight["training_end"])
+    if train_end <= train_start:
+        raise RuntimeError(f"Invalid fixed training window: {train_start} -> {train_end}")
+    return train_start, train_end
+
+
 def compute_signal_context(
     config: dict[str, Any],
+    state: dict[str, Any],
     complete_15m_end: pd.Timestamp,
-) -> tuple[dict[str, pd.DataFrame], dict[str, dict[str, float]], float]:
+) -> tuple[dict[str, pd.DataFrame], dict[str, dict[str, float]], float, pd.Timestamp, pd.Timestamp]:
     root, _ = config_paths(config)
     entry = config["entry_model"]
-    train_start = complete_15m_end - pd.Timedelta(days=int(entry["train_days"]))
+    train_start, train_end = state_training_window(state)
+    if train_end > complete_15m_end:
+        raise RuntimeError(f"Fixed training_end {train_end} is after complete_15m_end {complete_15m_end}")
     data: dict[str, pd.DataFrame] = {}
     thresholds: dict[str, dict[str, float]] = {}
     entry_gates: list[float] = []
@@ -555,20 +569,21 @@ def compute_signal_context(
         if df.empty:
             continue
         data[symbol] = df
-        gate = df["OI_Expansion_48"].replace([np.inf, -np.inf], np.nan).dropna()
-        raw_abs = resolver_raw(df).abs().replace([np.inf, -np.inf], np.nan).dropna()
+        train_df = df.loc[(df.index >= train_start) & (df.index < train_end)]
+        gate = train_df["OI_Expansion_48"].replace([np.inf, -np.inf], np.nan).dropna()
+        raw_abs = resolver_raw(train_df).abs().replace([np.inf, -np.inf], np.nan).dropna()
         if gate.empty or raw_abs.empty:
             continue
         gate_th = float(gate.quantile(float(entry["gate_quantile"])))
         resolver_th = float(raw_abs.quantile(float(entry["resolver_quantile"])))
         thresholds[symbol] = {"gate_threshold": gate_th, "resolver_threshold": resolver_th}
-        raw = resolver_raw(df).to_numpy(dtype=float)
-        gates = df["OI_Expansion_48"].to_numpy(dtype=float)
+        raw = resolver_raw(train_df).to_numpy(dtype=float)
+        gates = train_df["OI_Expansion_48"].to_numpy(dtype=float)
         base_mask = np.isfinite(gates) & np.isfinite(raw) & (gates >= gate_th) & (np.abs(raw) >= resolver_th)
         kept = apply_cooldown_positions(base_mask, int(entry["cooldown_bars"]))
         entry_gates.extend(gates[kept].tolist())
     extra_gate = float(np.quantile(np.asarray(entry_gates, dtype=float), float(entry["gate_entry_quantile"]))) if entry_gates else math.inf
-    return data, thresholds, extra_gate
+    return data, thresholds, extra_gate, train_start, train_end
 
 
 def latest_common_complete_15m_end(config: dict[str, Any]) -> pd.Timestamp:
@@ -800,9 +815,9 @@ def on_cooldown(account: dict[str, Any], symbol: str, now: pd.Timestamp, cooldow
     return False
 
 
-def compute_signals(config: dict[str, Any], complete_end: pd.Timestamp) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+def compute_signals(config: dict[str, Any], state: dict[str, Any], complete_end: pd.Timestamp) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     entry = config["entry_model"]
-    data, thresholds, extra_gate = compute_signal_context(config, complete_end)
+    data, thresholds, extra_gate, train_start, train_end = compute_signal_context(config, state, complete_end)
     signals: list[dict[str, Any]] = []
     for symbol in config["symbols"]:
         df = data.get(symbol)
@@ -838,7 +853,13 @@ def compute_signals(config: dict[str, Any], complete_end: pd.Timestamp) -> tuple
                 "theoretical_entry_close": float(df["close"].iloc[i]),
             }
         )
-    return signals, {"extra_entry_gate": extra_gate, "threshold_symbols": len(thresholds)}
+    return signals, {
+        "extra_entry_gate": extra_gate,
+        "threshold_symbols": len(thresholds),
+        "training_start": train_start.isoformat(),
+        "training_end": train_end.isoformat(),
+        "threshold_mode": "fixed_preflight_window",
+    }
 
 
 def build_position_from_signal(
@@ -1078,7 +1099,7 @@ def run_tick(config: dict[str, Any]) -> dict[str, Any]:
         tick_time = utc_now()
         complete_end = latest_common_complete_15m_end(config)
         exits = check_exits(config, state, tick_time)
-        signals, meta = compute_signals(config, complete_end)
+        signals, meta = compute_signals(config, state, complete_end)
         reverses = apply_reverse_signals(config, state, signals, tick_time)
         entries = open_entries(config, state, signals, tick_time)
         state["last_tick"] = {
