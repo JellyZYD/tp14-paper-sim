@@ -721,6 +721,26 @@ def init_state(config: dict[str, Any], force: bool = False) -> dict[str, Any]:
         ],
     }
     write_json(state_path, state)
+    write_json(
+        run_dir / "last_tick.json",
+        {
+            "last_tick": {
+                "tick_time": utc_now().isoformat(),
+                "status": "state_initialized_waiting_for_first_tick",
+                "signals": 0,
+                "entries": 0,
+                "exits": 0,
+                "threshold_symbols": len(config["symbols"]),
+                "training_start": train_start.isoformat(),
+                "training_end": train_end.isoformat(),
+                "threshold_mode": "tp14_v2_rankfixed_artifact"
+                if str(config.get("entry_model", {}).get("mode", "")).lower() == "tp14_v2_rankfixed"
+                else "fixed_preflight_window",
+            },
+            "signals": [],
+            "events": [],
+        },
+    )
     return state
 
 
