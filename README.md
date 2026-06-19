@@ -24,7 +24,7 @@ The runner has four paper accounts, all starting at 100 USDT:
 - `tp14_v2_highret_tp18_sl08_size05`: high-return filter, 10x, 5% margin, 18% TP, 8% stop.
 - `tp14_v2_highret_tp18_sl08_size10`: high-return filter, 10x, 10% margin, 18% TP, 8% stop.
 
-Notifications include the paper account, strategy id, leg, score, profile viable rate, margin, notional, TP, stop, PnL, and equity after exit.
+WeCom notifications are sent in Chinese and include the paper account, strategy id, leg, score, profile viable rate, margin, notional, TP, stop, PnL, and equity after exit.
 
 ## Signal Logic
 
@@ -35,7 +35,9 @@ Notifications include the paper account, strategy id, leg, score, profile viable
 - Model scores: fixed LightGBM models serialized in `artifacts/tp14_v2_artifacts.pkl`.
 - Profile filters: symbol-side historical profile from the fixed training window.
 - Signal clock: completed 15m bars only; `signal_lag_bars=0` is safe because incomplete 15m klines are not used.
-- Exit: 1m intrabar take-profit/stop first, then time exit at 24h max hold.
+- Entry fill guard: paper entries and reverse fills require a completed 1m execution bar whose open time is not earlier than the confirmed 15m signal close.
+- Exit: 1m intrabar hard stop first, then take-profit, then time exit at 24h max hold.
+- Execution data guard: if an open position has a consecutive 1m data gap greater than 2 minutes, the runner sends a Chinese risk alert and pauses time/reverse exit for that position until the missing 1m path can be replayed.
 
 ## Server Setup
 

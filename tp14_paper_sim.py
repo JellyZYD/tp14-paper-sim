@@ -613,10 +613,17 @@ def latest_common_complete_15m_end(config: dict[str, Any], as_of: pd.Timestamp |
     return min(data_complete_end, time_complete_end)
 
 
-def latest_fill_price(config: dict[str, Any], symbol: str, as_of: pd.Timestamp) -> tuple[pd.Timestamp, float]:
+def latest_fill_price(
+    config: dict[str, Any],
+    symbol: str,
+    as_of: pd.Timestamp,
+    min_bar_open_time: pd.Timestamp | None = None,
+) -> tuple[pd.Timestamp, float]:
     root, _ = config_paths(config)
     df = read_frame(root, "exec_klines", symbol)
     eligible = df.loc[df.index <= as_of]
+    if min_bar_open_time is not None:
+        eligible = eligible.loc[eligible.index >= pd.Timestamp(min_bar_open_time)]
     if eligible.empty:
         raise RuntimeError(f"No 1m execution data for {symbol}")
     row = eligible.iloc[-1]
@@ -727,6 +734,39 @@ def fill_stop_price(side: float, stop_price: float, open_price: float, low_price
     return float(open_price) if np.isfinite(open_price) and open_price >= stop_price else float(stop_price)
 
 
+def max_consecutive_missing_minutes(expected: pd.DatetimeIndex, available: pd.DatetimeIndex) -> int:
+    if expected.empty:
+        return 0
+    available_set = set(pd.DatetimeIndex(available).floor("min"))
+    max_run = 0
+    current_run = 0
+    for ts in expected:
+        if ts in available_set:
+            current_run = 0
+        else:
+            current_run += 1
+            max_run = max(max_run, current_run)
+    return int(max_run)
+
+
+def one_min_path_gap(
+    m1: pd.DataFrame,
+    last_checked: pd.Timestamp,
+    tick_time: pd.Timestamp,
+    max_gap_minutes: int = 2,
+) -> tuple[bool, int, int, pd.Timestamp | None]:
+    expected_end = pd.Timestamp(tick_time).floor("min") - pd.Timedelta(minutes=1)
+    expected_start = pd.Timestamp(last_checked).floor("min") + pd.Timedelta(minutes=1)
+    if expected_end < expected_start:
+        return False, 0, 0, None
+    expected = pd.date_range(expected_start, expected_end, freq="1min", tz="UTC")
+    available = m1.loc[(m1.index >= expected_start) & (m1.index <= expected_end)].index
+    missing_run = max_consecutive_missing_minutes(expected, available)
+    missing_count = int(len(expected.difference(pd.DatetimeIndex(available).floor("min"))))
+    last_available = pd.Timestamp(available.max()) if len(available) else None
+    return missing_run > max_gap_minutes, missing_run, missing_count, last_available
+
+
 def close_position(
     config: dict[str, Any],
     account: dict[str, Any],
@@ -773,6 +813,38 @@ def check_exits(config: dict[str, Any], state: dict[str, Any], tick_time: pd.Tim
             side = side_float(position["side"])
             last_checked = pd.Timestamp(position.get("last_checked_time", position["entry_fill_time"]))
             m1 = read_frame(root, "exec_klines", symbol)
+            gap_active, max_gap, missing_count, last_available = one_min_path_gap(m1, last_checked, tick_time)
+            if gap_active:
+                position["execution_gap_active"] = True
+                position["execution_gap_max_missing_run_minutes"] = int(max_gap)
+                position["execution_gap_missing_1m_bars"] = int(missing_count)
+                position["execution_gap_last_available_1m"] = last_available.isoformat() if last_available is not None else ""
+                last_alert = pd.Timestamp(position.get("execution_gap_last_alert_time", "1970-01-01T00:00:00+00:00"))
+                if tick_time - last_alert >= pd.Timedelta(minutes=30):
+                    position["execution_gap_last_alert_time"] = tick_time.isoformat()
+                    events.append(
+                        {
+                            "event": "alert",
+                            "alert_type": "execution_data_gap",
+                            "paper_account": account["paper_account"],
+                            "symbol": symbol,
+                            "side": position["side"],
+                            "strategy_id": position.get("strategy_id", ""),
+                            "strategy_name": position.get("strategy_name", ""),
+                            "entry_fill_time": position.get("entry_fill_time"),
+                            "last_checked_time": last_checked.isoformat(),
+                            "tick_time": tick_time.isoformat(),
+                            "max_gap_minutes": int(max_gap),
+                            "missing_1m_bars": int(missing_count),
+                            "last_available_1m": last_available.isoformat() if last_available is not None else "",
+                        }
+                    )
+                remaining.append(position)
+                continue
+            position.pop("execution_gap_active", None)
+            position.pop("execution_gap_max_missing_run_minutes", None)
+            position.pop("execution_gap_missing_1m_bars", None)
+            position.pop("execution_gap_last_available_1m", None)
             window = m1.loc[(m1.index > last_checked) & (m1.index <= tick_time)]
             exit_event: dict[str, Any] | None = None
             for ts, row in window.iterrows():
@@ -803,7 +875,12 @@ def check_exits(config: dict[str, Any], state: dict[str, Any], tick_time: pd.Tim
                     break
             if exit_event is None and tick_time - pd.Timestamp(position["entry_fill_time"]) >= pd.Timedelta(hours=max_hold_hours):
                 fill_time, fill_price = latest_fill_price(config, symbol, tick_time)
-                exit_event = {"time": fill_time, "price": fill_price, "reason": "time_exit"}
+                stop_price = float(position["protective_stop_price"])
+                if (side > 0 and fill_price < stop_price) or (side < 0 and fill_price > stop_price):
+                    fill_price = stop_price
+                    exit_event = {"time": fill_time, "price": fill_price, "reason": "late_stop_guard"}
+                else:
+                    exit_event = {"time": fill_time, "price": fill_price, "reason": "time_exit"}
             if exit_event is None:
                 position["last_checked_time"] = tick_time.isoformat()
                 remaining.append(position)
@@ -961,6 +1038,9 @@ def apply_reverse_signals(config: dict[str, Any], state: dict[str, Any], signals
             if signal is None or float(signal["direction"]) != -side_float(str(position["side"])):
                 remaining.append(position)
                 continue
+            if position.get("execution_gap_active"):
+                remaining.append(position)
+                continue
             key = signal_key(signal)
             if key in account["processed_signal_keys"]:
                 remaining.append(position)
@@ -969,7 +1049,8 @@ def apply_reverse_signals(config: dict[str, Any], state: dict[str, Any], signals
                 remaining.append(position)
                 continue
             try:
-                fill_time, fill_price = latest_fill_price(config, symbol, tick_time)
+                min_fill_time = pd.Timestamp(signal["entry_bar_end"])
+                fill_time, fill_price = latest_fill_price(config, symbol, tick_time, min_fill_time)
             except RuntimeError:
                 remaining.append(position)
                 continue
@@ -1000,7 +1081,8 @@ def open_entries(config: dict[str, Any], state: dict[str, Any], signals: list[di
             if on_cooldown(account, symbol, tick_time, cooldown_bars):
                 continue
             try:
-                fill_time, fill_price = latest_fill_price(config, symbol, tick_time)
+                min_fill_time = pd.Timestamp(signal["entry_bar_end"])
+                fill_time, fill_price = latest_fill_price(config, symbol, tick_time, min_fill_time)
             except RuntimeError:
                 continue
             position = build_position_from_signal(config, account, signal, tick_time, fill_time, fill_price)
@@ -1036,41 +1118,78 @@ def account_snapshot(state: dict[str, Any], paper_account: str) -> dict[str, Any
     return {}
 
 
+def safe_float(value: Any) -> float:
+    try:
+        return float(value)
+    except Exception:
+        return float("nan")
+
+
 def format_event_message(event: dict[str, Any], state: dict[str, Any], tick_time: pd.Timestamp) -> str:
     account = account_snapshot(state, str(event.get("paper_account", "")))
     equity = float(account.get("equity_usdt", event.get("account_equity_after", np.nan)))
     open_count = len(account.get("positions", []))
+    event_map = {"entry": "开仓", "exit": "平仓", "alert": "风险告警"}
+    side_map = {"long": "做多", "short": "做空"}
+    reason_map = {
+        "protective_stop": "硬止损",
+        "intrabar_take_profit": "盘中止盈",
+        "time_exit": "最长持仓到期",
+        "late_stop_guard": "延迟止损保护",
+        "reverse": "反向信号",
+        "execution_data_gap": "1m执行数据缺口",
+    }
+    event_name = event_map.get(str(event.get("event")), str(event.get("event")))
+    side_name_cn = side_map.get(str(event.get("side")), str(event.get("side", "")))
     lines = [
-        f"TP14 纸面交易 {event.get('event')} | {event.get('paper_account')} | {event.get('symbol')} {event.get('side')}",
-        f"tick_time_utc: {tick_time.isoformat()}",
-        f"equity_usdt: {equity:.4f}" if np.isfinite(equity) else "equity_usdt: n/a",
-        f"open_positions: {open_count}",
+        f"TP14纸面交易｜{event_name}",
+        f"账户：{event.get('paper_account')}",
+        f"标的：{event.get('symbol', '-') } {side_name_cn}".rstrip(),
+        f"检查时间UTC：{tick_time.isoformat()}",
+        f"账户权益：{equity:.4f} USDT" if np.isfinite(equity) else "账户权益：n/a",
+        f"当前持仓数：{open_count}",
     ]
     if event.get("strategy_id"):
-        lines.append(f"strategy: {event.get('strategy_id')} | {event.get('strategy_name', '')}")
+        lines.append(f"策略：{event.get('strategy_id')}｜{event.get('strategy_name', '')}")
     if event.get("leg"):
-        lines.append(f"leg: {event.get('leg')}")
+        lines.append(f"信号腿：{event.get('leg')}")
     if event.get("event") == "entry":
+        score = safe_float(event.get("score", np.nan))
+        profile_rate = safe_float(event.get("profile_viable_rate", np.nan))
         lines.extend(
             [
-                f"entry_time: {event.get('entry_fill_time')}",
-                f"entry_price: {float(event.get('entry_price', np.nan)):.8g}",
-                f"margin_usdt: {float(event.get('margin_usdt', np.nan)):.4f}",
-                f"notional_usdt: {float(event.get('notional_usdt', np.nan)):.4f}",
-                f"take_profit_price: {float(event.get('take_profit_price', np.nan)):.8g}",
-                f"protective_stop_price: {float(event.get('protective_stop_price', np.nan)):.8g}",
-                f"score: {float(event.get('score', np.nan)):.6f}" if np.isfinite(float(event.get("score", np.nan))) else "score: n/a",
-                f"profile_viable_rate: {float(event.get('profile_viable_rate', np.nan)):.4f}" if np.isfinite(float(event.get("profile_viable_rate", np.nan))) else "profile_viable_rate: n/a",
+                f"成交时间：{event.get('entry_fill_time')}",
+                f"成交价：{safe_float(event.get('entry_price', np.nan)):.8g}",
+                f"保证金：{safe_float(event.get('margin_usdt', np.nan)):.4f} USDT",
+                f"名义仓位：{safe_float(event.get('notional_usdt', np.nan)):.4f} USDT",
+                f"止盈价：{safe_float(event.get('take_profit_price', np.nan)):.8g}",
+                f"硬止损价：{safe_float(event.get('protective_stop_price', np.nan)):.8g}",
+                f"模型分数：{score:.6f}" if np.isfinite(score) else "模型分数：n/a",
+                f"历史画像可行率：{profile_rate:.4f}" if np.isfinite(profile_rate) else "历史画像可行率：n/a",
             ]
         )
     elif event.get("event") == "exit":
+        reason = reason_map.get(str(event.get("exit_reason")), str(event.get("exit_reason", "")))
         lines.extend(
             [
-                f"exit_time: {event.get('exit_time')}",
-                f"exit_reason: {event.get('exit_reason')}",
-                f"exit_price: {float(event.get('exit_price', np.nan)):.8g}",
-                f"pnl_usdt: {float(event.get('pnl_usdt', np.nan)):.4f}",
-                f"leveraged_net_return: {float(event.get('leveraged_net_return', np.nan)):.4%}",
+                f"平仓时间：{event.get('exit_time')}",
+                f"平仓原因：{reason}",
+                f"平仓价：{safe_float(event.get('exit_price', np.nan)):.8g}",
+                f"本笔盈亏：{safe_float(event.get('pnl_usdt', np.nan)):.4f} USDT",
+                f"杠杆后净收益率：{safe_float(event.get('leveraged_net_return', np.nan)):.4%}",
+            ]
+        )
+    elif event.get("event") == "alert":
+        alert_reason = reason_map.get(str(event.get("alert_type")), str(event.get("alert_type", "")))
+        lines.extend(
+            [
+                f"告警原因：{alert_reason}",
+                f"持仓入场时间：{event.get('entry_fill_time')}",
+                f"上次检查时间：{event.get('last_checked_time')}",
+                f"最大连续缺口：{event.get('max_gap_minutes')} 分钟",
+                f"缺失1m K线数：{event.get('missing_1m_bars')}",
+                f"最后可用1m：{event.get('last_available_1m') or 'n/a'}",
+                "处理：暂停该仓位自动时间退出/反向退出，等待补齐1m数据后继续重放路径。",
             ]
         )
     return "\n".join(lines)
