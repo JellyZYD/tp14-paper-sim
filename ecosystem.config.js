@@ -3,7 +3,7 @@ module.exports = {
     {
       name: "tp14-paper-sim",
       script: "tp14_paper_sim.py",
-      interpreter: "python3",
+      interpreter: process.env.TP14_PYTHON || ".venv/bin/python",
       args: "start --config config/paper_config.json --workers 4",
       autorestart: true,
       max_memory_restart: "1500M",

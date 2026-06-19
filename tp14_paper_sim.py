@@ -27,12 +27,12 @@ def utc_now() -> pd.Timestamp:
 
 def load_json(path: Path) -> dict[str, Any]:
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
+        return json.loads(path.read_text(encoding="utf-8-sig"))
     except Exception:
         backup = path.with_suffix(path.suffix + ".bak")
         if not backup.exists():
             raise
-        payload = json.loads(backup.read_text(encoding="utf-8"))
+        payload = json.loads(backup.read_text(encoding="utf-8-sig"))
         write_json(path, payload)
         return payload
 
@@ -551,6 +551,14 @@ def state_training_window(state: dict[str, Any]) -> tuple[pd.Timestamp, pd.Times
     return train_start, train_end
 
 
+def normalize_strategy_ids(raw: Any) -> list[str]:
+    if raw is None:
+        return []
+    if isinstance(raw, str):
+        return [raw]
+    return [str(item) for item in raw]
+
+
 def compute_signal_context(
     config: dict[str, Any],
     state: dict[str, Any],
@@ -595,7 +603,10 @@ def latest_common_complete_15m_end(config: dict[str, Any], as_of: pd.Timestamp |
             ends.append(df.index.max() + pd.Timedelta(minutes=15))
     if not ends:
         raise RuntimeError("No local 15m signal data. Run bootstrap first.")
-    data_complete_end = min(ends).floor("15min")
+    if str(config.get("entry_model", {}).get("mode", "")).lower() == "tp14_v2_rankfixed":
+        data_complete_end = max(ends).floor("15min")
+    else:
+        data_complete_end = min(ends).floor("15min")
     if as_of is None:
         return data_complete_end
     time_complete_end = pd.Timestamp(as_of).floor("15min")
@@ -649,10 +660,11 @@ def funding_return_between(
     return float((-side * window).sum())
 
 
-def protective_stop_price(entry_price: float, side: float, config: dict[str, Any]) -> float:
+def protective_stop_price(entry_price: float, side: float, config: dict[str, Any], account: dict[str, Any] | None = None) -> float:
     execution = config["execution"]
-    leverage = float(config["accounts"][0]["leverage"])
-    max_stop_pct = float(execution["max_stop_pct"])
+    account = account or config["accounts"][0]
+    leverage = float(account["leverage"])
+    max_stop_pct = float(account.get("stop_loss_pct", execution["max_stop_pct"]))
     adverse_pct = (1.0 / leverage) - float(execution["maintenance_margin_rate"]) - float(execution["liquidation_buffer_pct"])
     if side > 0:
         return float(max(entry_price * (1.0 - max_stop_pct), entry_price * (1.0 - adverse_pct)))
@@ -666,14 +678,21 @@ def init_state(config: dict[str, Any], force: bool = False) -> dict[str, Any]:
         return load_json(state_path)
     complete_end = latest_common_complete_15m_end(config)
     train_start = complete_end - pd.Timedelta(days=int(config["entry_model"]["train_days"]))
+    train_end = complete_end
+    if str(config.get("entry_model", {}).get("mode", "")).lower() == "tp14_v2_rankfixed":
+        from tp14_v2_live_core import load_artifact
+
+        artifact = load_artifact(config)
+        train_start = pd.Timestamp(artifact["training_start"])
+        train_end = pd.Timestamp(artifact["training_end"])
     state = {
         "created_at": utc_now().isoformat(),
         "status": "ready_for_official_paper",
         "universe": {"official_symbols": list(config["symbols"])},
         "preflight": {
             "training_start": train_start.isoformat(),
-            "training_end": complete_end.isoformat(),
-            "source": "fixed_deploy_config",
+            "training_end": train_end.isoformat(),
+            "source": "tp14_v2_artifact" if str(config.get("entry_model", {}).get("mode", "")).lower() == "tp14_v2_rankfixed" else "fixed_deploy_config",
         },
         "accounts": [
             {
@@ -684,6 +703,8 @@ def init_state(config: dict[str, Any], force: bool = False) -> dict[str, Any]:
                 "position_margin_pct": float(account["position_margin_pct"]),
                 "leverage": float(account["leverage"]),
                 "take_profit_pct": float(account["take_profit_pct"]),
+                "stop_loss_pct": float(account.get("stop_loss_pct", config["execution"]["max_stop_pct"])),
+                "strategy_ids": normalize_strategy_ids(account.get("strategy_ids", [])),
                 "positions": [],
                 "orders": [],
                 "trades": [],
@@ -808,7 +829,18 @@ def check_exits(config: dict[str, Any], state: dict[str, Any], tick_time: pd.Tim
 
 
 def signal_key(signal: dict[str, Any]) -> str:
-    return f"{signal['symbol']}|{signal['entry_bar_end']}|{signal['side']}"
+    return f"{signal.get('strategy_id', 'legacy')}|{signal['symbol']}|{signal['entry_bar_end']}|{signal['side']}"
+
+
+def account_allows_signal(account: dict[str, Any], signal: dict[str, Any]) -> bool:
+    strategy_ids = account.get("strategy_ids") or account.get("strategy_id")
+    if not strategy_ids:
+        return True
+    if isinstance(strategy_ids, str):
+        allowed = {strategy_ids}
+    else:
+        allowed = {str(item) for item in strategy_ids}
+    return str(signal.get("strategy_id", "legacy")) in allowed
 
 
 def on_cooldown(account: dict[str, Any], symbol: str, now: pd.Timestamp, cooldown_bars: int) -> bool:
@@ -820,6 +852,11 @@ def on_cooldown(account: dict[str, Any], symbol: str, now: pd.Timestamp, cooldow
 
 
 def compute_signals(config: dict[str, Any], state: dict[str, Any], complete_end: pd.Timestamp) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    if str(config.get("entry_model", {}).get("mode", "")).lower() == "tp14_v2_rankfixed":
+        from tp14_v2_live_core import compute_v2_signals
+
+        return compute_v2_signals(config, state, complete_end)
+
     entry = config["entry_model"]
     data, thresholds, extra_gate, train_start, train_end = compute_signal_context(config, state, complete_end)
     signals: list[dict[str, Any]] = []
@@ -896,20 +933,27 @@ def build_position_from_signal(
         "position_margin_pct": float(account["position_margin_pct"]),
         "take_profit_pct": float(account["take_profit_pct"]),
         "take_profit_price": take_profit_price(fill_price, direction, float(account["take_profit_pct"])),
-        "protective_stop_price": protective_stop_price(fill_price, direction, config),
+        "stop_loss_pct": float(account.get("stop_loss_pct", config["execution"]["max_stop_pct"])),
+        "protective_stop_price": protective_stop_price(fill_price, direction, config, account),
         "tx_cost_bps": float(config["execution"]["tx_cost_bps"]),
         "last_checked_time": fill_time.isoformat(),
         "signal_gate": signal["signal_gate"],
         "signal_raw": signal["signal_raw"],
+        "strategy_id": signal.get("strategy_id", "legacy"),
+        "strategy_name": signal.get("strategy_name", signal.get("strategy_id", "legacy")),
+        "leg": signal.get("leg", ""),
+        "score": signal.get("score", np.nan),
+        "profile_viable_rate": signal.get("profile_viable_rate", np.nan),
     }
 
 
 def apply_reverse_signals(config: dict[str, Any], state: dict[str, Any], signals: list[dict[str, Any]], tick_time: pd.Timestamp) -> list[dict[str, Any]]:
     events: list[dict[str, Any]] = []
-    signal_by_symbol = {str(signal["symbol"]): signal for signal in signals}
     cooldown = pd.Timedelta(minutes=15 * int(config["entry_model"]["cooldown_bars"]))
     for account in state["accounts"]:
         account.setdefault("processed_signal_keys", [])
+        account_signals = [signal for signal in signals if account_allows_signal(account, signal)]
+        signal_by_symbol = {str(signal["symbol"]): signal for signal in account_signals}
         remaining: list[dict[str, Any]] = []
         for position in account.get("positions", []):
             symbol = str(position["symbol"])
@@ -947,6 +991,8 @@ def open_entries(config: dict[str, Any], state: dict[str, Any], signals: list[di
         account.setdefault("processed_signal_keys", [])
         open_symbols = {position["symbol"] for position in account.get("positions", [])}
         for signal in signals:
+            if not account_allows_signal(account, signal):
+                continue
             symbol = signal["symbol"]
             key = signal_key(signal)
             if key in account["processed_signal_keys"] or symbol in open_symbols:
@@ -1000,6 +1046,10 @@ def format_event_message(event: dict[str, Any], state: dict[str, Any], tick_time
         f"equity_usdt: {equity:.4f}" if np.isfinite(equity) else "equity_usdt: n/a",
         f"open_positions: {open_count}",
     ]
+    if event.get("strategy_id"):
+        lines.append(f"strategy: {event.get('strategy_id')} | {event.get('strategy_name', '')}")
+    if event.get("leg"):
+        lines.append(f"leg: {event.get('leg')}")
     if event.get("event") == "entry":
         lines.extend(
             [
@@ -1009,6 +1059,8 @@ def format_event_message(event: dict[str, Any], state: dict[str, Any], tick_time
                 f"notional_usdt: {float(event.get('notional_usdt', np.nan)):.4f}",
                 f"take_profit_price: {float(event.get('take_profit_price', np.nan)):.8g}",
                 f"protective_stop_price: {float(event.get('protective_stop_price', np.nan)):.8g}",
+                f"score: {float(event.get('score', np.nan)):.6f}" if np.isfinite(float(event.get("score", np.nan))) else "score: n/a",
+                f"profile_viable_rate: {float(event.get('profile_viable_rate', np.nan)):.4f}" if np.isfinite(float(event.get("profile_viable_rate", np.nan))) else "profile_viable_rate: n/a",
             ]
         )
     elif event.get("event") == "exit":
@@ -1295,10 +1347,24 @@ def bootstrap(config: dict[str, Any], workers: int | None = None, force_state: b
 
 def seed_from_archive(config: dict[str, Any], archive: Path | None = None, force_state: bool = False) -> None:
     archive_path = archive or Path("bootstrap_seed") / "tp14_seed.zip"
-    if not archive_path.exists():
-        raise FileNotFoundError(f"Missing seed archive: {archive_path}")
-    with zipfile.ZipFile(archive_path, "r") as zf:
-        zf.extractall(Path("."))
+    extract_path = archive_path
+    temp_path: Path | None = None
+    if not extract_path.exists():
+        parts = sorted(archive_path.parent.glob(f"{archive_path.name}.part*"))
+        if not parts:
+            raise FileNotFoundError(f"Missing seed archive: {archive_path}")
+        temp_path = archive_path.parent / f"{archive_path.name}.assembled.tmp"
+        with temp_path.open("wb") as out:
+            for part in parts:
+                with part.open("rb") as handle:
+                    shutil.copyfileobj(handle, out)
+        extract_path = temp_path
+    try:
+        with zipfile.ZipFile(extract_path, "r") as zf:
+            zf.extractall(Path("."))
+    finally:
+        if temp_path is not None:
+            temp_path.unlink(missing_ok=True)
     init_state(config, force=force_state)
 
 

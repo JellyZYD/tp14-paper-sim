@@ -1,0 +1,5 @@
+rule,score_col,top_k,threshold,validation_pool,validation_selected,validation_win_rate_48h
+long_p33_inf_pos60_100,score_lgbm_combo,5,0.9583880037488286,184,5,0.4
+long_p5_8_pos20_40,score_lgbm_close,5,0.04540247839216911,6,5,0.4
+short_p9_16_pos60_80,score_not_overextended,10,0.15536690015207374,29,10,0.7
+long_p129_pos80_100,score_profile,5,0.7763251067374778,20,5,0.8
