@@ -38,6 +38,7 @@ WeCom notifications are sent in Chinese and include the paper account, strategy 
 - Entry fill guard: paper entries and reverse fills require a completed 1m execution bar whose open time is not earlier than the confirmed 15m signal close.
 - Exit: 1m intrabar hard stop first, then take-profit, then time exit at 24h max hold.
 - Execution data guard: if an open position has a consecutive 1m data gap greater than 2 minutes, the runner sends a Chinese risk alert and pauses time/reverse exit for that position until the missing 1m path can be replayed.
+- Binance rate-limit guard: while a 418/429 backoff is active, the runner does not actively request new execution klines for entries or reverses. Open positions are checked only with cached 1m data; if the cache has a gap, the execution-gap alert path takes over.
 
 ## Server Setup
 
@@ -54,13 +55,13 @@ bash install_health_cron.sh
 `deploy_pm2.sh` performs:
 
 - install/update Python dependencies,
-- extract the split seed archive if needed,
+- extract the split seed archive only when local market data is missing or `TP14_FORCE_STATE=1`,
 - initialize paper state without server-side selection/backtest,
 - start or reload pm2.
 
 `install_health_cron.sh` installs a 5-minute health monitor. Normal checks stay silent. It sends Chinese WeCom alerts only when health turns abnormal, and sends one recovery message when the system returns to normal. It checks PM2 status, stale ticks, recent traceback logs, Binance rate-limit/backoff, unreadable state, execution data gaps, and low disk space.
 
-Use `TP14_FORCE_STATE=1` for the first V2 upgrade so old TP14 account state is replaced by the four new 100U V2 paper accounts. For later restarts or code-only upgrades, omit `TP14_FORCE_STATE=1` to preserve open positions and trade history.
+Use `TP14_FORCE_STATE=1` for the first V2 upgrade so old TP14 account state is replaced by the four new 100U V2 paper accounts. For later restarts or code-only upgrades, omit `TP14_FORCE_STATE=1` to preserve open positions, trade history, and the latest local market-data cache. If old PM2 logs contain historical tracebacks, run `pm2 flush tp14-paper-sim` after the upgrade to avoid a one-time stale health alert.
 
 ## PM2 Commands
 

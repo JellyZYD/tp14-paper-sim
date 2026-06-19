@@ -22,8 +22,8 @@ if [ ! -x "$python_bin" ]; then
   exit 1
 fi
 
-cron_cmd="cd $repo_dir && $python_bin tp14_paper_sim.py health --config config/paper_config.json --max-heartbeat-age-minutes 10 --max-tick-age-minutes 10 --max-complete-end-lag-minutes 30 --min-free-disk-gb 1 --min-free-disk-pct 5 --no-fail >> runs/tp14/health_cron.log 2>&1"
-cron_line="*/5 * * * * TP14_HEALTH_CHECK=1 $cron_cmd # TP14_HEALTH_CHECK"
+cron_cmd="cd $repo_dir && PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH TP14_HEALTH_CHECK=1 $python_bin tp14_paper_sim.py health --config config/paper_config.json --max-heartbeat-age-minutes 10 --max-tick-age-minutes 10 --max-complete-end-lag-minutes 30 --min-free-disk-gb 1 --min-free-disk-pct 5 --no-fail >> runs/tp14/health_cron.log 2>&1"
+cron_line="*/5 * * * * $cron_cmd # TP14_HEALTH_CHECK"
 
 (
   crontab -l 2>/dev/null | grep -v "TP14_HEALTH_CHECK" || true

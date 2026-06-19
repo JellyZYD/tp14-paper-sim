@@ -384,10 +384,28 @@ def update_many(
 
 def is_rate_limited(rows: list[dict[str, Any]]) -> bool:
     for row in rows:
-        text = " ".join(str(value) for value in row.values())
-        if "HTTPError" in text and (" 418 " in text or " 429 " in text or "I'm a teapot" in text or "Too Many Requests" in text):
+        if is_rate_limit_text(" ".join(str(value) for value in row.values())):
             return True
     return False
+
+
+def is_rate_limit_text(text: str) -> bool:
+    return (
+        ("HTTPError" in text and (" 418 " in text or " 429 " in text or "I'm a teapot" in text or "Too Many Requests" in text))
+        or "code': -1003" in text
+        or '"code": -1003' in text
+    )
+
+
+def exception_is_rate_limited(exc: Exception) -> bool:
+    return is_rate_limit_text(repr(exc))
+
+
+def start_rate_limit_backoff(config: dict[str, Any], reason: str) -> None:
+    backoff_minutes = float(config["execution"].get("rate_limit_backoff_minutes", 60.0))
+    write_backoff_until(config, time.time() + backoff_minutes * 60.0, reason)
+    _, run_dir = config_paths(config)
+    append_log(run_dir / "paper_loop.log", f"{utc_now().isoformat()} RATE_LIMIT_DETECTED reason={reason} backoff_minutes={backoff_minutes}")
 
 
 def rate_limit_backoff_path(config: dict[str, Any]) -> Path:
@@ -835,16 +853,20 @@ def check_exits(config: dict[str, Any], state: dict[str, Any], tick_time: pd.Tim
     root, _ = config_paths(config)
     events: list[dict[str, Any]] = []
     max_hold_hours = int(config["entry_model"]["max_hold_bars"]) * 15 / 60
+    backoff_active = time.time() < read_backoff_until(config)
     for account in state["accounts"]:
         remaining = []
         for position in account.get("positions", []):
             symbol = position["symbol"]
             side = side_float(position["side"])
             last_checked = pd.Timestamp(position.get("last_checked_time", position["entry_fill_time"]))
-            try:
-                update_one_dataset(root, symbol, "exec_klines", 2)
-            except Exception:
-                pass
+            if not backoff_active:
+                try:
+                    update_one_dataset(root, symbol, "exec_klines", 2)
+                except Exception as exc:
+                    if exception_is_rate_limited(exc):
+                        start_rate_limit_backoff(config, "binance_418_or_429_exec_exit")
+                        backoff_active = True
             m1 = read_frame(root, "exec_klines", symbol)
             gap_active, max_gap, missing_count, last_available = one_min_path_gap(m1, last_checked, tick_time)
             if gap_active:
@@ -1061,6 +1083,7 @@ def apply_reverse_signals(config: dict[str, Any], state: dict[str, Any], signals
     events: list[dict[str, Any]] = []
     root, _ = config_paths(config)
     cooldown = pd.Timedelta(minutes=15 * int(config["entry_model"]["cooldown_bars"]))
+    backoff_active = time.time() < read_backoff_until(config)
     for account in state["accounts"]:
         account.setdefault("processed_signal_keys", [])
         account_signals = [signal for signal in signals if account_allows_signal(account, signal)]
@@ -1082,11 +1105,17 @@ def apply_reverse_signals(config: dict[str, Any], state: dict[str, Any], signals
             if tick_time - pd.Timestamp(position["entry_fill_time"]) <= cooldown:
                 remaining.append(position)
                 continue
+            if backoff_active:
+                remaining.append(position)
+                continue
             try:
                 update_one_dataset(root, symbol, "exec_klines", 2)
                 min_fill_time = pd.Timestamp(signal["entry_bar_end"])
                 fill_time, fill_price = latest_fill_price(config, symbol, tick_time, min_fill_time)
-            except RuntimeError:
+            except RuntimeError as exc:
+                if exception_is_rate_limited(exc):
+                    start_rate_limit_backoff(config, "binance_418_or_429_exec_reverse")
+                    backoff_active = True
                 remaining.append(position)
                 continue
             funding_return = funding_return_between(config, position, fill_time, fill_time)
@@ -1104,6 +1133,7 @@ def open_entries(config: dict[str, Any], state: dict[str, Any], signals: list[di
     events: list[dict[str, Any]] = []
     root, _ = config_paths(config)
     cooldown_bars = int(config["entry_model"]["cooldown_bars"])
+    backoff_active = time.time() < read_backoff_until(config)
     for account in state["accounts"]:
         account.setdefault("processed_signal_keys", [])
         open_symbols = {position["symbol"] for position in account.get("positions", [])}
@@ -1116,11 +1146,16 @@ def open_entries(config: dict[str, Any], state: dict[str, Any], signals: list[di
                 continue
             if on_cooldown(account, symbol, tick_time, cooldown_bars):
                 continue
+            if backoff_active:
+                continue
             try:
                 update_one_dataset(root, symbol, "exec_klines", 2)
                 min_fill_time = pd.Timestamp(signal["entry_bar_end"])
                 fill_time, fill_price = latest_fill_price(config, symbol, tick_time, min_fill_time)
-            except RuntimeError:
+            except RuntimeError as exc:
+                if exception_is_rate_limited(exc):
+                    start_rate_limit_backoff(config, "binance_418_or_429_exec_entry")
+                    backoff_active = True
                 continue
             position = build_position_from_signal(config, account, signal, tick_time, fill_time, fill_price)
             account.setdefault("positions", []).append(position)
@@ -1293,8 +1328,16 @@ def tail_text_lines(path: Path, count: int) -> list[str]:
 
 
 def pm2_app_status(app_name: str = "tp14-paper-sim") -> dict[str, Any]:
+    pm2_bin = shutil.which("pm2")
+    if pm2_bin is None:
+        for candidate in ("/usr/bin/pm2", "/usr/local/bin/pm2", "/root/.nvm/versions/node/bin/pm2"):
+            if Path(candidate).exists():
+                pm2_bin = candidate
+                break
+    if pm2_bin is None:
+        return {"ok": False, "status": "pm2_missing", "error": "pm2 executable not found in PATH or common locations"}
     try:
-        result = subprocess.run(["pm2", "jlist"], capture_output=True, text=True, timeout=8)
+        result = subprocess.run([pm2_bin, "jlist"], capture_output=True, text=True, timeout=8)
         if result.returncode != 0:
             return {"ok": False, "status": "pm2_error", "error": result.stderr.strip() or result.stdout.strip()}
         payload = json.loads(result.stdout or "[]")
@@ -1722,9 +1765,11 @@ def loop(config: dict[str, Any], max_iterations: int = 0) -> None:
             if started - last_funding_update >= float(config["execution"]["funding_update_interval_minutes"]) * 60:
                 datasets.add("funding")
                 last_funding_update = started
+            skipped_for_backoff = False
             if time.time() < rate_limit_backoff_until:
                 remaining = rate_limit_backoff_until - time.time()
                 rows = []
+                skipped_for_backoff = True
                 append_log(log_path, f"{utc_now().isoformat()} RATE_LIMIT_BACKOFF remaining_seconds={remaining:.0f}")
             else:
                 rows = update_many(config, datasets, 2, int(config["execution"]["workers"]))
@@ -1734,7 +1779,8 @@ def loop(config: dict[str, Any], max_iterations: int = 0) -> None:
                     write_backoff_until(config, rate_limit_backoff_until, "binance_418_or_429_loop")
                     append_log(log_path, f"{utc_now().isoformat()} RATE_LIMIT_DETECTED backoff_minutes={backoff_minutes}")
             failed = [row for row in rows if not row.get("ok")]
-            append_log(log_path, f"{utc_now().isoformat()} UPDATE datasets={','.join(sorted(datasets))} failed={len(failed)}")
+            update_label = "UPDATE_SKIPPED_BACKOFF" if skipped_for_backoff else "UPDATE"
+            append_log(log_path, f"{utc_now().isoformat()} {update_label} datasets={','.join(sorted(datasets))} failed={len(failed)}")
             if failed:
                 append_log(log_path, f"{utc_now().isoformat()} UPDATE_FAILED {failed}")
             result = run_tick(config)
