@@ -6,6 +6,10 @@ if [ ! -x .venv/bin/python ]; then
   python3 -m venv .venv
 fi
 .venv/bin/python -m pip install -r requirements.txt
-.venv/bin/python tp14_paper_sim.py seed --config config/paper_config.json
+seed_args=(seed --config config/paper_config.json)
+if [ "${TP14_FORCE_STATE:-0}" = "1" ]; then
+  seed_args+=(--force-state)
+fi
+.venv/bin/python tp14_paper_sim.py "${seed_args[@]}"
 pm2 startOrReload ecosystem.config.js --update-env
 pm2 save

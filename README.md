@@ -45,7 +45,7 @@ python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 export TP14_WEBHOOK_URL='https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=4b76e995-c816-4e0d-81cb-3e07c7ae140e'
-bash deploy_pm2.sh
+TP14_FORCE_STATE=1 bash deploy_pm2.sh
 ```
 
 `deploy_pm2.sh` performs:
@@ -54,6 +54,8 @@ bash deploy_pm2.sh
 - extract the split seed archive if needed,
 - initialize paper state without server-side selection/backtest,
 - start or reload pm2.
+
+Use `TP14_FORCE_STATE=1` for the first V2 upgrade so old TP14 account state is replaced by the four new 100U V2 paper accounts. For later restarts or code-only upgrades, omit `TP14_FORCE_STATE=1` to preserve open positions and trade history.
 
 ## PM2 Commands
 
