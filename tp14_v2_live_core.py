@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pickle
 from collections import deque
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -19,12 +20,17 @@ LIVE_LEGS: tuple[tuple[str, str], ...] = (
 )
 
 
+@lru_cache(maxsize=4)
+def load_artifact_file(artifact_path: str) -> dict[str, Any]:
+    with Path(artifact_path).open("rb") as handle:
+        return pickle.load(handle)
+
+
 def load_artifact(config: dict[str, Any]) -> dict[str, Any]:
     artifact_path = Path(config["entry_model"].get("artifact_path", "artifacts/tp14_v2_artifacts.pkl"))
     if not artifact_path.is_absolute():
         artifact_path = Path(__file__).resolve().parent / artifact_path
-    with artifact_path.open("rb") as handle:
-        return pickle.load(handle)
+    return load_artifact_file(str(artifact_path.resolve()))
 
 
 def normalize_timestamp_index(df: pd.DataFrame) -> pd.DataFrame:
@@ -271,7 +277,8 @@ def add_candidate_features(frame: pd.DataFrame, threshold: dict[str, float]) -> 
         current = current + 1 if is_base else 0
         persist[i] = current
     out["threshold_persist_bars"] = persist
-    out["just_crossed_threshold"] = base.astype(int) - base.shift(1).fillna(False).astype(int)
+    prior_base = base.shift(1, fill_value=False)
+    out["just_crossed_threshold"] = base.astype(int) - prior_base.astype(int)
     return out.replace([np.inf, -np.inf], np.nan)
 
 
