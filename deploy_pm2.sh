@@ -11,5 +11,6 @@ if [ "${TP14_FORCE_STATE:-0}" = "1" ]; then
   seed_args+=(--force-state)
 fi
 .venv/bin/python tp14_paper_sim.py "${seed_args[@]}"
-pm2 startOrReload ecosystem.config.js --update-env
+pm2 delete tp14-paper-sim >/dev/null 2>&1 || true
+pm2 start ecosystem.config.js --update-env
 pm2 save
