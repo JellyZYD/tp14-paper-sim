@@ -178,13 +178,14 @@
   },
   "execution": {
     "poll_interval_seconds": 60,
-    "workers": 4,
+    "workers": 2,
     "load_workers": 1,
     "tx_cost_bps": 5.0,
     "max_stop_pct": 0.1,
     "maintenance_margin_rate": 0.005,
     "liquidation_buffer_pct": 0.005,
-    "state_update_interval_minutes": 5,
+    "signal_update_interval_minutes": 5,
+    "state_update_interval_minutes": 15,
     "funding_update_interval_minutes": 60,
     "rate_limit_backoff_minutes": 60
   },

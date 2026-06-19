@@ -48,6 +48,7 @@ source .venv/bin/activate
 pip install -r requirements.txt
 export TP14_WEBHOOK_URL='https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=4b76e995-c816-4e0d-81cb-3e07c7ae140e'
 TP14_FORCE_STATE=1 bash deploy_pm2.sh
+bash install_health_cron.sh
 ```
 
 `deploy_pm2.sh` performs:
@@ -56,6 +57,8 @@ TP14_FORCE_STATE=1 bash deploy_pm2.sh
 - extract the split seed archive if needed,
 - initialize paper state without server-side selection/backtest,
 - start or reload pm2.
+
+`install_health_cron.sh` installs a 5-minute health monitor. Normal checks stay silent. It sends Chinese WeCom alerts only when health turns abnormal, and sends one recovery message when the system returns to normal. It checks PM2 status, stale ticks, recent traceback logs, Binance rate-limit/backoff, unreadable state, execution data gaps, and low disk space.
 
 Use `TP14_FORCE_STATE=1` for the first V2 upgrade so old TP14 account state is replaced by the four new 100U V2 paper accounts. For later restarts or code-only upgrades, omit `TP14_FORCE_STATE=1` to preserve open positions and trade history.
 

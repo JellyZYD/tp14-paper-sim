@@ -6,6 +6,7 @@ import math
 import os
 import shutil
 import subprocess
+import sys
 import time
 import zipfile
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -357,10 +358,18 @@ def update_symbol(root: Path, symbol: str, datasets: set[str], lookback_days: in
     return result
 
 
-def update_many(config: dict[str, Any], datasets: set[str], lookback_days: int, workers: int) -> list[dict[str, Any]]:
+def update_many(
+    config: dict[str, Any],
+    datasets: set[str],
+    lookback_days: int,
+    workers: int,
+    symbols: list[str] | None = None,
+) -> list[dict[str, Any]]:
     root, _ = config_paths(config)
-    symbols = list(config["symbols"])
+    symbols = list(symbols if symbols is not None else config["symbols"])
     rows: list[dict[str, Any]] = []
+    if not symbols or not datasets:
+        return rows
     max_workers = max(1, workers)
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         futures = {executor.submit(update_symbol, root, symbol, datasets, lookback_days): symbol for symbol in symbols}
@@ -832,6 +841,10 @@ def check_exits(config: dict[str, Any], state: dict[str, Any], tick_time: pd.Tim
             symbol = position["symbol"]
             side = side_float(position["side"])
             last_checked = pd.Timestamp(position.get("last_checked_time", position["entry_fill_time"]))
+            try:
+                update_one_dataset(root, symbol, "exec_klines", 2)
+            except Exception:
+                pass
             m1 = read_frame(root, "exec_klines", symbol)
             gap_active, max_gap, missing_count, last_available = one_min_path_gap(m1, last_checked, tick_time)
             if gap_active:
@@ -1046,6 +1059,7 @@ def build_position_from_signal(
 
 def apply_reverse_signals(config: dict[str, Any], state: dict[str, Any], signals: list[dict[str, Any]], tick_time: pd.Timestamp) -> list[dict[str, Any]]:
     events: list[dict[str, Any]] = []
+    root, _ = config_paths(config)
     cooldown = pd.Timedelta(minutes=15 * int(config["entry_model"]["cooldown_bars"]))
     for account in state["accounts"]:
         account.setdefault("processed_signal_keys", [])
@@ -1069,6 +1083,7 @@ def apply_reverse_signals(config: dict[str, Any], state: dict[str, Any], signals
                 remaining.append(position)
                 continue
             try:
+                update_one_dataset(root, symbol, "exec_klines", 2)
                 min_fill_time = pd.Timestamp(signal["entry_bar_end"])
                 fill_time, fill_price = latest_fill_price(config, symbol, tick_time, min_fill_time)
             except RuntimeError:
@@ -1087,6 +1102,7 @@ def apply_reverse_signals(config: dict[str, Any], state: dict[str, Any], signals
 
 def open_entries(config: dict[str, Any], state: dict[str, Any], signals: list[dict[str, Any]], tick_time: pd.Timestamp) -> list[dict[str, Any]]:
     events: list[dict[str, Any]] = []
+    root, _ = config_paths(config)
     cooldown_bars = int(config["entry_model"]["cooldown_bars"])
     for account in state["accounts"]:
         account.setdefault("processed_signal_keys", [])
@@ -1101,6 +1117,7 @@ def open_entries(config: dict[str, Any], state: dict[str, Any], signals: list[di
             if on_cooldown(account, symbol, tick_time, cooldown_bars):
                 continue
             try:
+                update_one_dataset(root, symbol, "exec_klines", 2)
                 min_fill_time = pd.Timestamp(signal["entry_bar_end"])
                 fill_time, fill_price = latest_fill_price(config, symbol, tick_time, min_fill_time)
             except RuntimeError:
@@ -1128,6 +1145,9 @@ def resolve_webhook_url(config: dict[str, Any]) -> str:
         path = Path(file_name)
         if path.exists():
             return path.read_text(encoding="utf-8").strip()
+    default_file = Path(__file__).resolve().parent / "config" / "webhook_url.txt"
+    if default_file.exists():
+        return default_file.read_text(encoding="utf-8").strip()
     return ""
 
 
@@ -1272,19 +1292,66 @@ def tail_text_lines(path: Path, count: int) -> list[str]:
     return path.read_text(encoding="utf-8", errors="replace").splitlines()[-count:]
 
 
-def health_report(config: dict[str, Any], max_heartbeat_age_minutes: float, max_tick_age_minutes: float) -> tuple[dict[str, Any], str]:
+def pm2_app_status(app_name: str = "tp14-paper-sim") -> dict[str, Any]:
+    try:
+        result = subprocess.run(["pm2", "jlist"], capture_output=True, text=True, timeout=8)
+        if result.returncode != 0:
+            return {"ok": False, "status": "pm2_error", "error": result.stderr.strip() or result.stdout.strip()}
+        payload = json.loads(result.stdout or "[]")
+        for item in payload:
+            if item.get("name") == app_name:
+                env = item.get("pm2_env", {})
+                monit = item.get("monit", {})
+                return {
+                    "ok": env.get("status") == "online",
+                    "status": env.get("status"),
+                    "pid": item.get("pid"),
+                    "restart_time": env.get("restart_time"),
+                    "memory_bytes": monit.get("memory"),
+                    "cpu": monit.get("cpu"),
+                }
+        return {"ok": False, "status": "not_found"}
+    except Exception as exc:
+        return {"ok": False, "status": "pm2_check_failed", "error": repr(exc)}
+
+
+def health_state_path(config: dict[str, Any]) -> Path:
+    _, run_dir = config_paths(config)
+    return run_dir / "health_status.json"
+
+
+def disk_status(path: Path) -> dict[str, Any]:
+    usage = shutil.disk_usage(path if path.exists() else path.parent)
+    free_gb = usage.free / 1024**3
+    total_gb = usage.total / 1024**3
+    free_pct = usage.free / usage.total * 100 if usage.total else 0.0
+    return {"free_gb": free_gb, "total_gb": total_gb, "free_pct": free_pct}
+
+
+def health_report(
+    config: dict[str, Any],
+    max_heartbeat_age_minutes: float,
+    max_tick_age_minutes: float,
+    max_complete_end_lag_minutes: float,
+    min_free_disk_gb: float,
+    min_free_disk_pct: float,
+) -> tuple[dict[str, Any], str]:
     _, run_dir = config_paths(config)
     now = utc_now()
     state = load_json_optional(run_dir / "paper_state.json")
     heartbeat = load_json_optional(run_dir / "paper_loop.heartbeat.json")
     last_tick_payload = load_json_optional(run_dir / "last_tick.json").get("last_tick", {})
     backoff = load_json_optional(run_dir / "rate_limit_backoff.json")
-    log_tail = tail_text_lines(run_dir / "paper_loop.log", 200)
+    log_tail = tail_text_lines(run_dir / "paper_loop.log", 200) + tail_text_lines(run_dir / "pm2.err.log", 200)
+    pm2 = pm2_app_status()
+    disk = disk_status(run_dir)
 
     hb_ts = parse_timestamp(heartbeat.get("updated_at"))
     tick_ts = parse_timestamp(last_tick_payload.get("tick_time"))
+    complete_end_ts = parse_timestamp(last_tick_payload.get("complete_15m_end"))
     hb_age = float((now - hb_ts).total_seconds() / 60.0) if hb_ts is not None else None
     tick_age = float((now - tick_ts).total_seconds() / 60.0) if tick_ts is not None else None
+    complete_end_lag = float((now - complete_end_ts).total_seconds() / 60.0) if complete_end_ts is not None else None
     backoff_until = float(backoff.get("backoff_until", 0.0)) if backoff else 0.0
     backoff_remaining = max((backoff_until - now.timestamp()) / 60.0, 0.0) if backoff_until else 0.0
 
@@ -1298,11 +1365,15 @@ def health_report(config: dict[str, Any], max_heartbeat_age_minutes: float, max_
     accounts = []
     total_open = 0
     total_trades = 0
+    execution_gap_positions: list[str] = []
     for account in state.get("accounts", []):
         positions = account.get("positions", [])
         trades = account.get("trades", [])
         total_open += len(positions)
         total_trades += len(trades)
+        for position in positions:
+            if position.get("execution_gap_active"):
+                execution_gap_positions.append(f"{account.get('paper_account')}:{position.get('symbol')}:{position.get('side')}")
         accounts.append(
             {
                 "paper_account": account.get("paper_account"),
@@ -1315,29 +1386,65 @@ def health_report(config: dict[str, Any], max_heartbeat_age_minutes: float, max_
 
     healthy = True
     reasons: list[str] = []
+    reason_codes: list[str] = []
+    if not pm2.get("ok"):
+        healthy = False
+        reason_codes.append("pm2_not_online")
+        reasons.append(f"PM2状态异常: {pm2.get('status')}")
+    if not state or not state.get("accounts"):
+        healthy = False
+        reason_codes.append("state_unreadable")
+        reasons.append("paper_state.json无法读取或账户为空")
     if not heartbeat:
         healthy = False
+        reason_codes.append("missing_heartbeat")
         reasons.append("missing_heartbeat")
     elif hb_age is None or hb_age > max_heartbeat_age_minutes:
         healthy = False
-        reasons.append(f"stale_heartbeat_minutes={hb_age}")
+        reason_codes.append("stale_heartbeat")
+        reasons.append(f"heartbeat过期: {hb_age:.1f}分钟" if hb_age is not None else "heartbeat时间无效")
     if not last_tick_payload:
         healthy = False
+        reason_codes.append("missing_last_tick")
         reasons.append("missing_last_tick")
     elif tick_age is None or tick_age > max_tick_age_minutes:
         healthy = False
-        reasons.append(f"stale_last_tick_minutes={tick_age}")
+        reason_codes.append("stale_last_tick")
+        reasons.append(f"last_tick过期: {tick_age:.1f}分钟" if tick_age is not None else "last_tick时间无效")
+    if complete_end_lag is None:
+        healthy = False
+        reason_codes.append("missing_complete_15m_end")
+        reasons.append("缺少complete_15m_end")
+    elif complete_end_lag > max_complete_end_lag_minutes:
+        healthy = False
+        reason_codes.append("stale_market_data")
+        reasons.append(f"15m行情滞后: {complete_end_lag:.1f}分钟")
     if recent_errors:
+        healthy = False
+        reason_codes.append("recent_traceback")
         reasons.append(f"recent_error_lines={len(recent_errors)}")
     if backoff_remaining > 0:
-        reasons.append(f"rate_limit_backoff_remaining_minutes={backoff_remaining:.1f}")
+        healthy = False
+        reason_codes.append("rate_limit_backoff")
+        reasons.append(f"Binance API限流/疑似IP临时封禁退避: {backoff_remaining:.1f}分钟")
+    if execution_gap_positions:
+        healthy = False
+        reason_codes.append("execution_gap")
+        reasons.append("持仓存在1m执行数据缺口: " + ",".join(execution_gap_positions[:5]))
+    if disk["free_gb"] < min_free_disk_gb or disk["free_pct"] < min_free_disk_pct:
+        healthy = False
+        reason_codes.append("low_disk")
+        reasons.append(f"磁盘空间不足: free={disk['free_gb']:.2f}GB/{disk['free_pct']:.1f}%")
 
     summary = {
         "checked_at": now.isoformat(),
         "healthy": healthy,
         "reasons": reasons,
+        "reason_codes": sorted(set(reason_codes)),
+        "pm2": pm2,
         "heartbeat_age_minutes": hb_age,
         "last_tick_age_minutes": tick_age,
+        "complete_15m_end_lag_minutes": complete_end_lag,
         "last_tick": last_tick_payload,
         "accounts": accounts,
         "total_open_positions": total_open,
@@ -1345,24 +1452,29 @@ def health_report(config: dict[str, Any], max_heartbeat_age_minutes: float, max_
         "recent_log_errors": recent_errors[-5:],
         "recent_log_warnings": recent_warnings[-5:],
         "rate_limit_backoff_remaining_minutes": backoff_remaining,
+        "execution_gap_positions": execution_gap_positions,
+        "disk": disk,
     }
 
     lines = [
-        f"TP14 server paper health: {'healthy' if healthy else 'unhealthy'}",
-        f"checked_at_utc: {summary['checked_at']}",
-        f"heartbeat_age_min: {hb_age:.2f}" if hb_age is not None else "heartbeat_age_min: n/a",
-        f"last_tick_age_min: {tick_age:.2f}" if tick_age is not None else "last_tick_age_min: n/a",
+        f"TP14服务器健康检查｜{'正常' if healthy else '异常'}",
+        f"检查时间UTC：{summary['checked_at']}",
+        f"PM2状态：{pm2.get('status')} pid={pm2.get('pid')}",
+        f"heartbeat年龄：{hb_age:.2f}分钟" if hb_age is not None else "heartbeat年龄：n/a",
+        f"last_tick年龄：{tick_age:.2f}分钟" if tick_age is not None else "last_tick年龄：n/a",
+        f"15m行情滞后：{complete_end_lag:.2f}分钟" if complete_end_lag is not None else "15m行情滞后：n/a",
         (
-            "last_tick: "
+            "最近tick："
             f"signals={last_tick_payload.get('signals')} "
             f"entries={last_tick_payload.get('entries')} "
             f"exits={last_tick_payload.get('exits')}"
         ),
-        f"open_positions: {total_open}",
-        f"closed_trades: {total_trades}",
+        f"持仓数：{total_open}",
+        f"已平仓笔数：{total_trades}",
+        f"磁盘剩余：{disk['free_gb']:.2f}GB ({disk['free_pct']:.1f}%)",
     ]
     if reasons:
-        lines.append("reasons: " + "; ".join(reasons))
+        lines.append("异常原因：" + "；".join(reasons))
     for account in accounts:
         lines.append(
             f"{account['paper_account']}: equity={account['equity_usdt']:.4f} "
@@ -1370,6 +1482,56 @@ def health_report(config: dict[str, Any], max_heartbeat_age_minutes: float, max_
             f"symbols={','.join(str(symbol) for symbol in account['open_symbols'])}"
         )
     return summary, "\n".join(lines)
+
+
+def maybe_notify_health(config: dict[str, Any], summary: dict[str, Any], text: str) -> tuple[bool, str | None, str]:
+    path = health_state_path(config)
+    previous = load_json_optional(path)
+    was_healthy = bool(previous.get("healthy", True))
+    previous_codes = sorted(previous.get("reason_codes", []))
+    current_codes = sorted(summary.get("reason_codes", []))
+    should_send = False
+    message = text
+    event = "silent"
+    if not summary["healthy"] and (was_healthy or previous_codes != current_codes):
+        should_send = True
+        event = "unhealthy"
+    elif summary["healthy"] and not was_healthy:
+        should_send = True
+        event = "recovered"
+        tick_age = summary.get("last_tick_age_minutes")
+        complete_lag = summary.get("complete_15m_end_lag_minutes")
+        recovery_lines = [
+            "TP14服务器健康检查｜已恢复",
+            f"恢复时间UTC：{summary['checked_at']}",
+            f"PM2状态：{summary.get('pm2', {}).get('status')}",
+            f"last_tick年龄：{tick_age:.2f}分钟" if isinstance(tick_age, (int, float)) else "last_tick年龄：n/a",
+            f"15m行情滞后：{complete_lag:.2f}分钟" if isinstance(complete_lag, (int, float)) else "15m行情滞后：n/a",
+        ]
+        message = "\n".join(recovery_lines)
+    if not should_send:
+        write_json(
+            path,
+            {
+                "checked_at": summary["checked_at"],
+                "healthy": bool(summary["healthy"]),
+                "reason_codes": current_codes,
+                "notified_event": event,
+            },
+        )
+        return False, None, event
+    ok, error = notify_text(config, message)
+    if ok:
+        write_json(
+            path,
+            {
+                "checked_at": summary["checked_at"],
+                "healthy": bool(summary["healthy"]),
+                "reason_codes": current_codes,
+                "notified_event": event,
+            },
+        )
+    return ok, error, event
 
 
 def acquire_lock(path: Path, stale_seconds: float = 300.0) -> bool:
@@ -1524,7 +1686,7 @@ def start(config: dict[str, Any], workers: int | None = None, force_state: bool 
     else:
         rows = update_many(
             config,
-            {"signal_klines", "exec_klines", "funding", "oi", "global_acct_ratio", "top_acct_ratio", "top_pos_ratio"},
+            {"signal_klines"},
             2,
             int(workers or config["execution"]["workers"]),
         )
@@ -1541,15 +1703,19 @@ def loop(config: dict[str, Any], max_iterations: int = 0) -> None:
     if not acquire_lock(lock, stale_seconds=900.0):
         raise RuntimeError(f"Loop lock is active: {lock}")
     append_log(log_path, f"START {utc_now().isoformat()} pid={os.getpid()}")
-    last_state_update = 0.0
-    last_funding_update = 0.0
+    last_signal_update = 0.0
+    last_state_update = time.time()
+    last_funding_update = time.time()
     rate_limit_backoff_until = read_backoff_until(config)
     iteration = 0
     try:
         while True:
             iteration += 1
             started = time.time()
-            datasets = {"signal_klines", "exec_klines"}
+            datasets: set[str] = set()
+            if started - last_signal_update >= float(config["execution"].get("signal_update_interval_minutes", 1.0)) * 60:
+                datasets.add("signal_klines")
+                last_signal_update = started
             if started - last_state_update >= float(config["execution"]["state_update_interval_minutes"]) * 60:
                 datasets.update({"oi", "global_acct_ratio", "top_acct_ratio", "top_pos_ratio"})
                 last_state_update = started
@@ -1596,7 +1762,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max-iterations", type=int, default=0)
     parser.add_argument("--seed-archive", default=None)
     parser.add_argument("--max-heartbeat-age-minutes", type=float, default=5.0)
-    parser.add_argument("--max-tick-age-minutes", type=float, default=20.0)
+    parser.add_argument("--max-tick-age-minutes", type=float, default=10.0)
+    parser.add_argument("--max-complete-end-lag-minutes", type=float, default=30.0)
+    parser.add_argument("--min-free-disk-gb", type=float, default=1.0)
+    parser.add_argument("--min-free-disk-pct", type=float, default=5.0)
     parser.add_argument("--no-fail", action="store_true")
     parser.add_argument("--no-webhook", action="store_true")
     parser.add_argument("--json", action="store_true")
@@ -1621,14 +1790,23 @@ def main() -> None:
     elif args.command == "loop":
         loop(config, args.max_iterations)
     elif args.command == "health":
-        summary, text = health_report(config, args.max_heartbeat_age_minutes, args.max_tick_age_minutes)
+        summary, text = health_report(
+            config,
+            args.max_heartbeat_age_minutes,
+            args.max_tick_age_minutes,
+            args.max_complete_end_lag_minutes,
+            args.min_free_disk_gb,
+            args.min_free_disk_pct,
+        )
         if args.json:
             print(json.dumps(summary, ensure_ascii=False, indent=2, default=str))
         else:
             print(text)
-        if not args.no_webhook and not summary["healthy"]:
-            ok, error = notify_text(config, text)
-            if not ok:
+        if not args.no_webhook:
+            ok, error, event = maybe_notify_health(config, summary, text)
+            if event != "silent":
+                print(f"HEALTH_NOTIFY event={event} sent={ok}")
+            if event != "silent" and not ok:
                 print(f"WEBHOOK_ERROR {error}", file=sys.stderr)
         raise SystemExit(0 if args.no_fail or summary["healthy"] else 2)
     elif args.command == "notify-text":
