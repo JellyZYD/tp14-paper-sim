@@ -1462,7 +1462,7 @@ def format_event_message(event: dict[str, Any], state: dict[str, Any], tick_time
                 f"最大连续缺口：{event.get('max_gap_minutes')} 分钟",
                 f"缺失1m K线数：{event.get('missing_1m_bars')}",
                 f"最后可用1m：{event.get('last_available_1m') or 'n/a'}",
-                "处理：暂停该仓位自动时间退出/反向退出，等待补齐1m数据后继续重放路径。",
+                "处理：暂停该仓位自动时间退出，等待补齐1m数据后继续重放路径。",
             ]
         )
     return "\n".join(lines)
@@ -1839,7 +1839,8 @@ def run_tick(config: dict[str, Any]) -> dict[str, Any]:
         complete_end = latest_common_complete_15m_end(config, tick_time)
         exits = check_exits(config, state, tick_time)
         signals, meta = compute_signals(config, state, complete_end)
-        reverses = apply_reverse_signals(config, state, signals, tick_time)
+        allow_reverse = bool(config.get("entry_model", {}).get("allow_reverse", True))
+        reverses = apply_reverse_signals(config, state, signals, tick_time) if allow_reverse else []
         entries = open_entries(config, state, signals, tick_time)
         state["last_tick"] = {
             "tick_time": tick_time.isoformat(),
@@ -1847,6 +1848,7 @@ def run_tick(config: dict[str, Any]) -> dict[str, Any]:
             "signals": len(signals),
             "entries": len([event for event in reverses + entries if event.get("event") == "entry"]),
             "exits": len([event for event in exits + reverses if event.get("event") == "exit"]),
+            "allow_reverse": allow_reverse,
             **meta,
         }
         events = exits + reverses + entries

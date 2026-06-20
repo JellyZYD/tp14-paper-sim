@@ -37,12 +37,13 @@ WeCom notifications are sent in Chinese and include the paper account, strategy 
 - Model scores: fixed LightGBM models serialized in `artifacts/tp14_v2_artifacts.pkl`.
 - Profile filters: symbol-side historical profile from the fixed training window.
 - Signal clock: completed 15m bars only; `signal_lag_bars=0` is safe because incomplete 15m klines are not used.
-- Entry fill guard: paper entries and reverse fills require a completed 1m execution bar whose open time is not earlier than the confirmed 15m signal close.
+- Entry fill guard: paper entries require a completed 1m execution bar whose open time is not earlier than the confirmed 15m signal close.
+- Reverse-on-opposite-signal is disabled in this deployment so live paper exits match the optimized exit research set.
 - Exit: 1m intrabar hard stop first, then fixed/dynamic take-profit, then 3%+ emotion-fade exit, then time exit at 24h max hold.
 - Dynamic TP: stable accounts use score-v2 TP buckets from live `score_lgbm_combo/score_profile`: 12%, 16%, 20%, or 24%.
-- Emotion-fade exit: after a position has at least 3% raw favorable move, exit on the next 1m close when the 5m whale-vs-retail favorable raw signal fades back to zero or worse.
-- Execution data guard: if an open position has a consecutive 1m data gap greater than 2 minutes, the runner sends a Chinese risk alert and pauses time/reverse exit for that position until the missing 1m path can be replayed.
-- Binance rate-limit guard: while a 418/429 backoff is active, the runner does not actively request new execution klines for entries or reverses. Open positions are checked only with cached 1m data; if the cache has a gap, the execution-gap alert path takes over.
+- Emotion-fade exit: after a position has at least 3% raw favorable move, exit on the next 1m close when the 5m whale-vs-retail favorable raw signal fades back to zero or worse. The live loop refreshes emotion-state datasets every 5 minutes.
+- Execution data guard: if an open position has a consecutive 1m data gap greater than 2 minutes, the runner sends a Chinese risk alert and pauses automatic time exit for that position until the missing 1m path can be replayed.
+- Binance rate-limit guard: while a 418/429 backoff is active, the runner does not actively request new execution klines for entries. Open positions are checked only with cached 1m data; if the cache has a gap, the execution-gap alert path takes over.
 
 ## Server Setup
 

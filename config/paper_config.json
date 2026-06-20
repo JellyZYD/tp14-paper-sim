@@ -204,6 +204,7 @@
     "artifact_path": "artifacts/tp14_v2_artifacts.pkl",
     "signal_timeframe": "15m",
     "signal_lag_bars": 0,
+    "allow_reverse": false,
     "cooldown_bars": 16,
     "max_hold_bars": 96,
     "train_days": 60
@@ -217,7 +218,7 @@
     "maintenance_margin_rate": 0.005,
     "liquidation_buffer_pct": 0.005,
     "signal_update_interval_minutes": 5,
-    "state_update_interval_minutes": 15,
+    "state_update_interval_minutes": 5,
     "funding_update_interval_minutes": 60,
     "rate_limit_backoff_minutes": 60
   },
