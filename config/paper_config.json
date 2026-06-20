@@ -123,45 +123,77 @@
   ],
   "accounts": [
     {
-      "paper_account": "tp14_v2_stable_tp10_sl08_size05",
+      "paper_account": "tp14_v2_stable_scoretpv2_fadep3_sl08_size05",
+      "legacy_paper_accounts": [
+        "tp14_v2_stable_tp10_sl08_size05"
+      ],
       "initial_equity_usdt": 100.0,
       "position_margin_pct": 0.05,
       "leverage": 10.0,
-      "take_profit_pct": 0.1,
+      "take_profit_pct": 0.12,
+      "take_profit_mode": "score_v2",
       "stop_loss_pct": 0.08,
+      "exit_model": "scoretp_v2_fade_p3",
+      "emotion_exit_mode": "fade",
+      "emotion_min_profit_pct": 0.03,
+      "emotion_fade_mult": 0.0,
       "strategy_ids": [
         "stable_profile034045_tp10_sl08"
       ]
     },
     {
-      "paper_account": "tp14_v2_stable_tp10_sl08_size10",
+      "paper_account": "tp14_v2_stable_scoretpv2_fadep3_sl08_size10",
+      "legacy_paper_accounts": [
+        "tp14_v2_stable_tp10_sl08_size10"
+      ],
       "initial_equity_usdt": 100.0,
       "position_margin_pct": 0.1,
       "leverage": 10.0,
-      "take_profit_pct": 0.1,
+      "take_profit_pct": 0.12,
+      "take_profit_mode": "score_v2",
       "stop_loss_pct": 0.08,
+      "exit_model": "scoretp_v2_fade_p3",
+      "emotion_exit_mode": "fade",
+      "emotion_min_profit_pct": 0.03,
+      "emotion_fade_mult": 0.0,
       "strategy_ids": [
         "stable_profile034045_tp10_sl08"
       ]
     },
     {
-      "paper_account": "tp14_v2_highret_tp18_sl08_size05",
+      "paper_account": "tp14_v2_highret_tp20_fadep3_sl08_size05",
+      "legacy_paper_accounts": [
+        "tp14_v2_highret_tp18_sl08_size05"
+      ],
       "initial_equity_usdt": 100.0,
       "position_margin_pct": 0.05,
       "leverage": 10.0,
-      "take_profit_pct": 0.18,
+      "take_profit_pct": 0.2,
+      "take_profit_mode": "fixed",
       "stop_loss_pct": 0.08,
+      "exit_model": "fixedtp0.20_fade_p3",
+      "emotion_exit_mode": "fade",
+      "emotion_min_profit_pct": 0.03,
+      "emotion_fade_mult": 0.0,
       "strategy_ids": [
         "rankfixed_base_tp18_sl08"
       ]
     },
     {
-      "paper_account": "tp14_v2_highret_tp18_sl08_size10",
+      "paper_account": "tp14_v2_highret_tp20_fadep3_sl08_size10",
+      "legacy_paper_accounts": [
+        "tp14_v2_highret_tp18_sl08_size10"
+      ],
       "initial_equity_usdt": 100.0,
       "position_margin_pct": 0.1,
       "leverage": 10.0,
-      "take_profit_pct": 0.18,
+      "take_profit_pct": 0.2,
+      "take_profit_mode": "fixed",
       "stop_loss_pct": 0.08,
+      "exit_model": "fixedtp0.20_fade_p3",
+      "emotion_exit_mode": "fade",
+      "emotion_min_profit_pct": 0.03,
+      "emotion_fade_mult": 0.0,
       "strategy_ids": [
         "rankfixed_base_tp18_sl08"
       ]

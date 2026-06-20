@@ -669,6 +669,85 @@ def take_profit_price(entry_price: float, side: float, pct: float) -> float:
     return float(entry_price * (1.0 + pct)) if side > 0 else float(entry_price * (1.0 - pct))
 
 
+def finite_float(value: Any, default: float = np.nan) -> float:
+    try:
+        out = float(value)
+    except Exception:
+        return default
+    return out if np.isfinite(out) else default
+
+
+def resolve_take_profit_pct(account: dict[str, Any], signal_or_position: dict[str, Any]) -> float:
+    default_tp = finite_float(account.get("take_profit_pct"), finite_float(signal_or_position.get("take_profit_pct"), 0.18))
+    mode = str(account.get("take_profit_mode", "fixed")).lower()
+    if mode == "fixed":
+        return default_tp
+    score_combo = finite_float(signal_or_position.get("score_lgbm_combo"))
+    score_profile = finite_float(signal_or_position.get("score_profile"))
+    fallback_score = finite_float(signal_or_position.get("score"))
+    scores = [value for value in (score_combo, score_profile, fallback_score) if np.isfinite(value)]
+    score = max(scores) if scores else 0.0
+    if mode == "score_v2":
+        if score >= 0.86:
+            return 0.24
+        if score >= 0.78:
+            return 0.20
+        if score >= 0.68:
+            return 0.16
+        return 0.12
+    raise ValueError(f"Unknown take_profit_mode: {mode}")
+
+
+def load_emotion_state(root: Path, symbol: str, start: pd.Timestamp, end: pd.Timestamp) -> pd.DataFrame:
+    frames: list[pd.DataFrame] = []
+    specs = [
+        ("oi", {"OpenInterest": ("OpenInterest", "oi"), "OpenInterestValue": ("OpenInterestValue", "oi_value")}),
+        ("global_acct_ratio", {"LS_Ratio": ("LS_Ratio", "ratio")}),
+        ("top_pos_ratio", {"TopPosition_LS_Ratio": ("TopPosition_LS_Ratio", "ratio")}),
+    ]
+    for dataset, columns in specs:
+        try:
+            frame = read_frame(root, dataset, symbol)
+        except Exception:
+            continue
+        if frame.empty:
+            continue
+        for target, aliases in columns.items():
+            frame = coalesce_columns(frame, target, tuple(alias for alias in aliases if alias != target))
+        keep = [target for target in columns if target in frame.columns]
+        if keep:
+            frames.append(frame.loc[(frame.index >= start) & (frame.index <= end), keep])
+    if not frames:
+        return pd.DataFrame(index=pd.DatetimeIndex([], tz="UTC"))
+    out = pd.concat(frames, axis=1, sort=True).sort_index()
+    out = out.loc[~out.index.duplicated(keep="last")]
+    out = out.loc[:, ~out.columns.duplicated(keep="last")]
+    if "TopPosition_LS_Ratio" in out.columns and "LS_Ratio" in out.columns:
+        top = pd.to_numeric(out["TopPosition_LS_Ratio"], errors="coerce")
+        retail = pd.to_numeric(out["LS_Ratio"], errors="coerce")
+        out["WhaleFadeRaw"] = -(np.log(top.where(top > 0.0)) - np.log(retail.where(retail > 0.0)))
+    return out
+
+
+def emotion_fade_exit_triggered(position: dict[str, Any], state_row: pd.Series, side: float, close_price: float) -> bool:
+    if str(position.get("emotion_exit_mode", "none")).lower() != "fade":
+        return False
+    entry_price = finite_float(position.get("entry_price"))
+    if not np.isfinite(entry_price) or entry_price <= 0.0 or not np.isfinite(close_price):
+        return False
+    min_profit = finite_float(position.get("emotion_min_profit_pct"), np.inf)
+    current_profit = side * (float(close_price) / entry_price - 1.0)
+    if current_profit < min_profit:
+        return False
+    raw = finite_float(state_row.get("WhaleFadeRaw"))
+    resolver_threshold = abs(finite_float(position.get("resolver_threshold")))
+    fade_mult = finite_float(position.get("emotion_fade_mult"), 0.0)
+    if not np.isfinite(raw) or not np.isfinite(resolver_threshold):
+        return False
+    favorable_raw = side * raw
+    return bool(favorable_raw <= resolver_threshold * fade_mult)
+
+
 def funding_return_between(
     config: dict[str, Any],
     position: dict[str, Any],
@@ -737,7 +816,12 @@ def init_state(config: dict[str, Any], force: bool = False) -> dict[str, Any]:
                 "position_margin_pct": float(account["position_margin_pct"]),
                 "leverage": float(account["leverage"]),
                 "take_profit_pct": float(account["take_profit_pct"]),
+                "take_profit_mode": str(account.get("take_profit_mode", "fixed")),
                 "stop_loss_pct": float(account.get("stop_loss_pct", config["execution"]["max_stop_pct"])),
+                "exit_model": str(account.get("exit_model", "fixed_tpsl")),
+                "emotion_exit_mode": str(account.get("emotion_exit_mode", "none")),
+                "emotion_min_profit_pct": finite_float(account.get("emotion_min_profit_pct"), np.nan),
+                "emotion_fade_mult": finite_float(account.get("emotion_fade_mult"), np.nan),
                 "strategy_ids": normalize_strategy_ids(account.get("strategy_ids", [])),
                 "positions": [],
                 "orders": [],
@@ -769,6 +853,77 @@ def init_state(config: dict[str, Any], force: bool = False) -> dict[str, Any]:
         },
     )
     return state
+
+
+def sync_state_accounts_from_config(config: dict[str, Any], state: dict[str, Any]) -> None:
+    """Apply non-destructive account config updates without resetting paper history."""
+    state_accounts = state.setdefault("accounts", [])
+    archived_accounts = state.setdefault("archived_accounts", [])
+    archived_names = {str(account.get("paper_account", "")) for account in archived_accounts}
+    used_ids: set[int] = set()
+    synced: list[dict[str, Any]] = []
+    for cfg in config.get("accounts", []):
+        aliases = {str(cfg.get("paper_account", "")), *[str(item) for item in cfg.get("legacy_paper_accounts", [])]}
+        match = None
+        for account in state_accounts:
+            if id(account) in used_ids:
+                continue
+            if str(account.get("paper_account", "")) in aliases:
+                match = account
+                break
+        if match is None:
+            match = {
+                "paper_account": cfg["paper_account"],
+                "initial_equity_usdt": float(cfg["initial_equity_usdt"]),
+                "equity_usdt": float(cfg["initial_equity_usdt"]),
+                "cash_usdt": float(cfg["initial_equity_usdt"]),
+                "positions": [],
+                "orders": [],
+                "trades": [],
+                "processed_signal_keys": [],
+            }
+        used_ids.add(id(match))
+        match["paper_account"] = str(cfg["paper_account"])
+        match["position_margin_pct"] = float(cfg["position_margin_pct"])
+        match["leverage"] = float(cfg["leverage"])
+        match["take_profit_pct"] = float(cfg["take_profit_pct"])
+        match["take_profit_mode"] = str(cfg.get("take_profit_mode", "fixed"))
+        match["stop_loss_pct"] = float(cfg.get("stop_loss_pct", config["execution"]["max_stop_pct"]))
+        match["exit_model"] = str(cfg.get("exit_model", "fixed_tpsl"))
+        match["emotion_exit_mode"] = str(cfg.get("emotion_exit_mode", "none"))
+        match["emotion_min_profit_pct"] = finite_float(cfg.get("emotion_min_profit_pct"), np.nan)
+        match["emotion_fade_mult"] = finite_float(cfg.get("emotion_fade_mult"), np.nan)
+        match["strategy_ids"] = normalize_strategy_ids(cfg.get("strategy_ids", []))
+        match.setdefault("positions", [])
+        match.setdefault("orders", [])
+        match.setdefault("trades", [])
+        match.setdefault("processed_signal_keys", [])
+        for position in match.get("positions", []):
+            position["position_margin_pct"] = float(match["position_margin_pct"])
+            position["leverage"] = float(match["leverage"])
+            position["take_profit_mode"] = str(match["take_profit_mode"])
+            position["exit_model"] = str(match["exit_model"])
+            position["emotion_exit_mode"] = str(match["emotion_exit_mode"])
+            position["emotion_min_profit_pct"] = finite_float(match.get("emotion_min_profit_pct"), np.nan)
+            position["emotion_fade_mult"] = finite_float(match.get("emotion_fade_mult"), np.nan)
+            side = side_float(str(position.get("side", "long")))
+            entry_price = finite_float(position.get("entry_price"))
+            if np.isfinite(entry_price) and entry_price > 0.0:
+                tp = resolve_take_profit_pct(match, position)
+                position["take_profit_pct"] = float(tp)
+                position["take_profit_price"] = take_profit_price(entry_price, side, tp)
+                position["stop_loss_pct"] = float(match["stop_loss_pct"])
+                position["protective_stop_price"] = protective_stop_price(entry_price, side, config, match)
+        synced.append(match)
+    for account in state_accounts:
+        if id(account) not in used_ids:
+            name = str(account.get("paper_account", ""))
+            if name not in archived_names:
+                account["archived_at"] = utc_now().isoformat()
+                account["archive_reason"] = "not_in_active_config"
+                archived_accounts.append(account)
+                archived_names.add(name)
+    state["accounts"] = synced
 
 
 def fill_stop_price(side: float, stop_price: float, open_price: float, low_price: float, high_price: float) -> float | None:
@@ -901,11 +1056,14 @@ def check_exits(config: dict[str, Any], state: dict[str, Any], tick_time: pd.Tim
             position.pop("execution_gap_missing_1m_bars", None)
             position.pop("execution_gap_last_available_1m", None)
             window = m1.loc[(m1.index > last_checked) & (m1.index <= tick_time)]
+            emotion_state = load_emotion_state(root, symbol, last_checked - pd.Timedelta(minutes=10), tick_time) if str(position.get("emotion_exit_mode", "none")).lower() != "none" else pd.DataFrame(index=window.index)
+            aligned_emotion = emotion_state.reindex(window.index, method="ffill") if not emotion_state.empty and not window.empty else pd.DataFrame(index=window.index)
             exit_event: dict[str, Any] | None = None
             for ts, row in window.iterrows():
                 bar_open = float(row["open"])
                 bar_high = float(row["high"])
                 bar_low = float(row["low"])
+                bar_close = float(row["close"])
                 stop_fill = fill_stop_price(side, float(position["protective_stop_price"]), bar_open, bar_low, bar_high)
                 if stop_fill is not None:
                     exit_event = {
@@ -928,6 +1086,27 @@ def check_exits(config: dict[str, Any], state: dict[str, Any], tick_time: pd.Tim
                         "funding_cutoff_time": pd.Timestamp(ts),
                     }
                     break
+                if not aligned_emotion.empty and ts in aligned_emotion.index and np.isfinite(bar_close):
+                    state_row = aligned_emotion.loc[ts]
+                    raw = finite_float(state_row.get("WhaleFadeRaw"))
+                    oi = finite_float(state_row.get("OpenInterest"))
+                    previous_raw = finite_float(position.get("last_emotion_raw"))
+                    previous_oi = finite_float(position.get("last_emotion_oi"))
+                    raw_changed = np.isfinite(raw) and (not np.isfinite(previous_raw) or float(raw) != float(previous_raw))
+                    oi_changed = np.isfinite(oi) and (not np.isfinite(previous_oi) or float(oi) != float(previous_oi))
+                    if raw_changed or oi_changed:
+                        if np.isfinite(raw):
+                            position["last_emotion_raw"] = float(raw)
+                        if np.isfinite(oi):
+                            position["last_emotion_oi"] = float(oi)
+                        if emotion_fade_exit_triggered(position, state_row, side, bar_close):
+                            exit_event = {
+                                "time": pd.Timestamp(ts) + pd.Timedelta(minutes=1),
+                                "price": float(bar_close),
+                                "reason": "emotion_fade_exit",
+                                "funding_cutoff_time": pd.Timestamp(ts),
+                            }
+                            break
             if exit_event is None and tick_time - pd.Timestamp(position["entry_fill_time"]) >= pd.Timedelta(hours=max_hold_hours):
                 fill_time, fill_price = latest_fill_price(config, symbol, tick_time)
                 stop_price = float(position["protective_stop_price"])
@@ -1046,6 +1225,7 @@ def build_position_from_signal(
     direction = float(signal["direction"])
     margin = float(account["equity_usdt"]) * float(account["position_margin_pct"])
     notional = margin * float(account["leverage"])
+    take_profit_pct = resolve_take_profit_pct(account, signal)
     return {
         "symbol": signal["symbol"],
         "side": side_name(direction),
@@ -1063,18 +1243,32 @@ def build_position_from_signal(
         "quantity": float(notional / fill_price) if fill_price > 0 else 0.0,
         "leverage": float(account["leverage"]),
         "position_margin_pct": float(account["position_margin_pct"]),
-        "take_profit_pct": float(account["take_profit_pct"]),
-        "take_profit_price": take_profit_price(fill_price, direction, float(account["take_profit_pct"])),
+        "take_profit_pct": float(take_profit_pct),
+        "take_profit_mode": str(account.get("take_profit_mode", "fixed")),
+        "take_profit_price": take_profit_price(fill_price, direction, take_profit_pct),
         "stop_loss_pct": float(account.get("stop_loss_pct", config["execution"]["max_stop_pct"])),
         "protective_stop_price": protective_stop_price(fill_price, direction, config, account),
         "tx_cost_bps": float(config["execution"]["tx_cost_bps"]),
         "last_checked_time": fill_time.isoformat(),
         "signal_gate": signal["signal_gate"],
         "signal_raw": signal["signal_raw"],
+        "resolver_threshold": signal.get("resolver_threshold", np.nan),
+        "exit_model": str(account.get("exit_model", "fixed_tpsl")),
+        "emotion_exit_mode": str(account.get("emotion_exit_mode", "none")),
+        "emotion_min_profit_pct": finite_float(account.get("emotion_min_profit_pct"), np.nan),
+        "emotion_fade_mult": finite_float(account.get("emotion_fade_mult"), np.nan),
         "strategy_id": signal.get("strategy_id", "legacy"),
         "strategy_name": signal.get("strategy_name", signal.get("strategy_id", "legacy")),
         "leg": signal.get("leg", ""),
         "score": signal.get("score", np.nan),
+        "score_lgbm_combo": signal.get("score_lgbm_combo", np.nan),
+        "score_profile": signal.get("score_profile", np.nan),
+        "score_lgbm_close": signal.get("score_lgbm_close", np.nan),
+        "score_not_overextended": signal.get("score_not_overextended", np.nan),
+        "profile_avg_mfe": signal.get("profile_avg_mfe", np.nan),
+        "profile_avg_mae": signal.get("profile_avg_mae", np.nan),
+        "raw_strength": signal.get("raw_strength", np.nan),
+        "gate_strength": signal.get("gate_strength", np.nan),
         "profile_viable_rate": signal.get("profile_viable_rate", np.nan),
     }
 
@@ -1209,6 +1403,7 @@ def format_event_message(event: dict[str, Any], state: dict[str, Any], tick_time
     reason_map = {
         "protective_stop": "硬止损",
         "intrabar_take_profit": "盘中止盈",
+        "emotion_fade_exit": "情绪消退止盈",
         "time_exit": "最长持仓到期",
         "late_stop_guard": "延迟止损保护",
         "reverse": "反向信号",
@@ -1228,6 +1423,8 @@ def format_event_message(event: dict[str, Any], state: dict[str, Any], tick_time
         lines.append(f"策略：{event.get('strategy_id')}｜{event.get('strategy_name', '')}")
     if event.get("leg"):
         lines.append(f"信号腿：{event.get('leg')}")
+    if event.get("exit_model"):
+        lines.append(f"出场模型：{event.get('exit_model')}｜TP模式：{event.get('take_profit_mode', 'fixed')}")
     if event.get("event") == "entry":
         score = safe_float(event.get("score", np.nan))
         profile_rate = safe_float(event.get("profile_viable_rate", np.nan))
@@ -1237,6 +1434,7 @@ def format_event_message(event: dict[str, Any], state: dict[str, Any], tick_time
                 f"成交价：{safe_float(event.get('entry_price', np.nan)):.8g}",
                 f"保证金：{safe_float(event.get('margin_usdt', np.nan)):.4f} USDT",
                 f"名义仓位：{safe_float(event.get('notional_usdt', np.nan)):.4f} USDT",
+                f"止盈比例：{safe_float(event.get('take_profit_pct', np.nan)):.2%}",
                 f"止盈价：{safe_float(event.get('take_profit_price', np.nan)):.8g}",
                 f"硬止损价：{safe_float(event.get('protective_stop_price', np.nan)):.8g}",
                 f"模型分数：{score:.6f}" if np.isfinite(score) else "模型分数：n/a",
@@ -1636,6 +1834,7 @@ def run_tick(config: dict[str, Any]) -> dict[str, Any]:
     try:
         state_path = run_dir / "paper_state.json"
         state = init_state(config, force=False) if not state_path.exists() else load_json(state_path)
+        sync_state_accounts_from_config(config, state)
         tick_time = utc_now()
         complete_end = latest_common_complete_15m_end(config, tick_time)
         exits = check_exits(config, state, tick_time)

@@ -19,10 +19,12 @@ This repository does not run universe discovery, parameter search, or backtests 
 
 The runner has four paper accounts, all starting at 100 USDT:
 
-- `tp14_v2_stable_tp10_sl08_size05`: stable filter, 10x, 5% margin, 10% TP, 8% stop.
-- `tp14_v2_stable_tp10_sl08_size10`: stable filter, 10x, 10% margin, 10% TP, 8% stop.
-- `tp14_v2_highret_tp18_sl08_size05`: high-return filter, 10x, 5% margin, 18% TP, 8% stop.
-- `tp14_v2_highret_tp18_sl08_size10`: high-return filter, 10x, 10% margin, 18% TP, 8% stop.
+- `tp14_v2_stable_scoretpv2_fadep3_sl08_size05`: stable filter, 10x, 5% margin, score-v2 dynamic TP, 8% stop, 3%+ emotion-fade exit.
+- `tp14_v2_stable_scoretpv2_fadep3_sl08_size10`: stable filter, 10x, 10% margin, score-v2 dynamic TP, 8% stop, 3%+ emotion-fade exit.
+- `tp14_v2_highret_tp20_fadep3_sl08_size05`: high-return filter, 10x, 5% margin, 20% TP, 8% stop, 3%+ emotion-fade exit.
+- `tp14_v2_highret_tp20_fadep3_sl08_size10`: high-return filter, 10x, 10% margin, 20% TP, 8% stop, 3%+ emotion-fade exit.
+
+The current config keeps the previous leverage and position sizing. Existing state is migrated in place from the old `tp10/tp18` account names by `legacy_paper_accounts`; equity, open positions, closed trades, and processed signal keys are preserved. Accounts that are not present in the active config are moved to `archived_accounts` and no longer trade.
 
 WeCom notifications are sent in Chinese and include the paper account, strategy id, leg, score, profile viable rate, margin, notional, TP, stop, PnL, and equity after exit.
 
@@ -36,7 +38,9 @@ WeCom notifications are sent in Chinese and include the paper account, strategy 
 - Profile filters: symbol-side historical profile from the fixed training window.
 - Signal clock: completed 15m bars only; `signal_lag_bars=0` is safe because incomplete 15m klines are not used.
 - Entry fill guard: paper entries and reverse fills require a completed 1m execution bar whose open time is not earlier than the confirmed 15m signal close.
-- Exit: 1m intrabar hard stop first, then take-profit, then time exit at 24h max hold.
+- Exit: 1m intrabar hard stop first, then fixed/dynamic take-profit, then 3%+ emotion-fade exit, then time exit at 24h max hold.
+- Dynamic TP: stable accounts use score-v2 TP buckets from live `score_lgbm_combo/score_profile`: 12%, 16%, 20%, or 24%.
+- Emotion-fade exit: after a position has at least 3% raw favorable move, exit on the next 1m close when the 5m whale-vs-retail favorable raw signal fades back to zero or worse.
 - Execution data guard: if an open position has a consecutive 1m data gap greater than 2 minutes, the runner sends a Chinese risk alert and pauses time/reverse exit for that position until the missing 1m path can be replayed.
 - Binance rate-limit guard: while a 418/429 backoff is active, the runner does not actively request new execution klines for entries or reverses. Open positions are checked only with cached 1m data; if the cache has a gap, the execution-gap alert path takes over.
 
@@ -61,7 +65,7 @@ bash install_health_cron.sh
 
 `install_health_cron.sh` installs a 5-minute health monitor. Normal checks stay silent. It sends Chinese WeCom alerts only when health turns abnormal, and sends one recovery message when the system returns to normal. It checks PM2 status, stale ticks, recent traceback logs, Binance rate-limit/backoff, unreadable state, execution data gaps, and low disk space.
 
-Use `TP14_FORCE_STATE=1` for the first V2 upgrade so old TP14 account state is replaced by the four new 100U V2 paper accounts. For later restarts or code-only upgrades, omit `TP14_FORCE_STATE=1` to preserve open positions, trade history, and the latest local market-data cache. If old PM2 logs contain historical tracebacks, run `pm2 flush tp14-paper-sim` after the upgrade to avoid a one-time stale health alert.
+Use `TP14_FORCE_STATE=1` only when intentionally resetting the paper accounts to fresh 100U state. For this exit-model upgrade and normal restarts, omit `TP14_FORCE_STATE=1`; the runner migrates old account names and applies the new exit settings without deleting open positions, trade history, or the local market-data cache. If old PM2 logs contain historical tracebacks, run `pm2 flush tp14-paper-sim` after the upgrade to avoid a one-time stale health alert.
 
 ## PM2 Commands
 

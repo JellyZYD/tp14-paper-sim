@@ -606,6 +606,14 @@ def compute_v2_signals(config: dict[str, Any], state: dict[str, Any], complete_e
                     "leg": row.get("leg", ""),
                     "leg_score_col": row.get("leg_score_col", ""),
                     "score": float(row.get("score", np.nan)),
+                    "score_lgbm_combo": float(row.get("score_lgbm_combo", np.nan)),
+                    "score_profile": float(row.get("score_profile", np.nan)),
+                    "score_lgbm_close": float(row.get("score_lgbm_close", np.nan)),
+                    "score_not_overextended": float(row.get("score_not_overextended", np.nan)),
+                    "profile_avg_mfe": float(row.get("profile_avg_mfe", np.nan)),
+                    "profile_avg_mae": float(row.get("profile_avg_mae", np.nan)),
+                    "raw_strength": float(row.get("raw_strength", np.nan)),
+                    "gate_strength": float(row.get("gate_strength", np.nan)),
                     "profile_viable_rate": float(row.get("profile_viable_rate", np.nan)),
                 }
             )
