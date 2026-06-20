@@ -4,6 +4,7 @@ import argparse
 import json
 import math
 import os
+import signal
 import shutil
 import subprocess
 import sys
@@ -20,6 +21,16 @@ import requests
 
 BINANCE_FAPI = "https://fapi.binance.com"
 INTERVAL_MS = {"1m": 60_000, "5m": 300_000, "15m": 900_000}
+
+
+def handle_shutdown_signal(signum: int, _frame: Any) -> None:
+    print(f"{utc_now().isoformat()} SHUTDOWN_SIGNAL signum={signum} graceful_shutdown", file=sys.stderr)
+    raise SystemExit(0)
+
+
+def install_shutdown_signal_handlers() -> None:
+    for signum in (signal.SIGINT, signal.SIGTERM):
+        signal.signal(signum, handle_shutdown_signal)
 
 
 def utc_now() -> pd.Timestamp:
@@ -2067,6 +2078,7 @@ def main() -> None:
 
 
 if __name__ == "__main__":
+    install_shutdown_signal_handlers()
     try:
         main()
     except KeyboardInterrupt:
