@@ -466,7 +466,9 @@ def add_scores(events: pd.DataFrame, artifact: dict[str, Any]) -> pd.DataFrame:
             if model is None:
                 out[f"score_lgbm_{name}"] = np.nan
                 continue
-            if name in ("viable", "close"):
+            if isinstance(model, dict) and model.get("type") == "lightgbm_booster":
+                raw_pred = model["booster"].predict(matrix)
+            elif name in ("viable", "close"):
                 raw_pred = model.predict_proba(matrix)[:, 1]
             else:
                 raw_pred = model.predict(matrix)
