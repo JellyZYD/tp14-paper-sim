@@ -19,14 +19,14 @@ This repository does not run universe discovery, parameter search, or backtests 
 
 The runner has four paper accounts, all starting at 100 USDT:
 
-- `tp14_v2_stable_scoretpv2_fadep3_sl08_size05`: stable filter, 10x, 5% margin, score-v2 dynamic TP, 8% stop, 3%+ emotion-fade exit.
-- `tp14_v2_stable_scoretpv2_fadep3_sl08_size10`: stable filter, 10x, 10% margin, score-v2 dynamic TP, 8% stop, 3%+ emotion-fade exit.
-- `tp14_v2_highret_tp20_fadep3_sl08_size05`: high-return filter, 10x, 5% margin, 20% TP, 8% stop, 3%+ emotion-fade exit.
-- `tp14_v2_highret_tp20_fadep3_sl08_size10`: high-return filter, 10x, 10% margin, 20% TP, 8% stop, 3%+ emotion-fade exit.
+- `tp14_v2_stable_profitrun72_peak25_launch24_sl08_size05`: stable filter, 10x, 5% margin, no fixed TP, 8% stop, 3%+ emotion-fade exit, 25% peak-profit trail, 24h failed-launch exit, 72h max hold.
+- `tp14_v2_stable_profitrun72_peak25_launch24_sl08_size10`: stable filter, 10x, 10% margin, no fixed TP, 8% stop, 3%+ emotion-fade exit, 25% peak-profit trail, 24h failed-launch exit, 72h max hold.
+- `tp14_v2_highret_profitrun72_peak25_launch24_sl08_size05`: high-return filter, 10x, 5% margin, no fixed TP, 8% stop, 3%+ emotion-fade exit, 25% peak-profit trail, 24h failed-launch exit, 72h max hold.
+- `tp14_v2_highret_profitrun72_peak25_launch24_sl08_size10`: high-return filter, 10x, 10% margin, no fixed TP, 8% stop, 3%+ emotion-fade exit, 25% peak-profit trail, 24h failed-launch exit, 72h max hold.
 
 The current config keeps the previous leverage and position sizing. Existing state is migrated in place from the old `tp10/tp18` account names by `legacy_paper_accounts`; equity, open positions, closed trades, and processed signal keys are preserved. Accounts that are not present in the active config are moved to `archived_accounts` and no longer trade.
 
-WeCom notifications are sent in Chinese and include the paper account, strategy id, leg, score, profile viable rate, margin, notional, TP, stop, PnL, and equity after exit.
+WeCom notifications are sent in Chinese and include the paper account, strategy id, leg, score, profile viable rate, margin, notional, exit model, stop, profit-run controls, PnL, and equity after exit.
 
 ## Signal Logic
 
@@ -39,8 +39,10 @@ WeCom notifications are sent in Chinese and include the paper account, strategy 
 - Signal clock: completed 15m bars only; `signal_lag_bars=0` is safe because incomplete 15m klines are not used.
 - Entry fill guard: paper entries require a completed 1m execution bar whose open time is not earlier than the confirmed 15m signal close.
 - Reverse-on-opposite-signal is disabled in this deployment so live paper exits match the optimized exit research set.
-- Exit: 1m intrabar hard stop first, then fixed/dynamic take-profit, then 3%+ emotion-fade exit, then time exit at 24h max hold.
-- Dynamic TP: stable accounts use score-v2 TP buckets from live `score_lgbm_combo/score_profile`: 12%, 16%, 20%, or 24%.
+- Exit: 1m intrabar hard stop first, then optional take-profit if enabled, then peak-profit trail, then failed-launch exit, then 3%+ emotion-fade exit, then 72h time exit as the final fallback.
+- Fixed TP is disabled in the current deployment. The research-selected profit-run exit lets winners continue instead of closing at an arbitrary TP.
+- Peak-profit trail: after raw favorable MFE reaches 25%, exit on a 1m close when current raw profit falls to 60% of the best observed raw profit.
+- Failed-launch exit: after 24h, if best favorable MFE is still below 10% and current raw profit is not above 4%, exit because the emotion event failed to become a trend.
 - Emotion-fade exit: after a position has at least 3% raw favorable move, exit on the next 1m close when the 5m whale-vs-retail favorable raw signal fades back to zero or worse. The live loop refreshes emotion-state datasets every 5 minutes.
 - Execution data guard: if an open position has a consecutive 1m data gap greater than 2 minutes, the runner sends a Chinese risk alert and pauses automatic time exit for that position until the missing 1m path can be replayed.
 - Binance rate-limit guard: while a 418/429 backoff is active, the runner does not actively request new execution klines for entries. Open positions are checked only with cached 1m data; if the cache has a gap, the execution-gap alert path takes over.

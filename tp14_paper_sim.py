@@ -677,6 +677,8 @@ def side_float(side: str) -> float:
 
 
 def take_profit_price(entry_price: float, side: float, pct: float) -> float:
+    if not np.isfinite(pct) or pct <= 0.0:
+        return float("nan")
     return float(entry_price * (1.0 + pct)) if side > 0 else float(entry_price * (1.0 - pct))
 
 
@@ -690,6 +692,8 @@ def finite_float(value: Any, default: float = np.nan) -> float:
 
 def resolve_take_profit_pct(account: dict[str, Any], signal_or_position: dict[str, Any]) -> float:
     default_tp = finite_float(account.get("take_profit_pct"), finite_float(signal_or_position.get("take_profit_pct"), 0.18))
+    if not bool(account.get("take_profit_enabled", True)):
+        return default_tp
     mode = str(account.get("take_profit_mode", "fixed")).lower()
     if mode == "fixed":
         return default_tp
@@ -757,6 +761,29 @@ def emotion_fade_exit_triggered(position: dict[str, Any], state_row: pd.Series, 
         return False
     favorable_raw = side * raw
     return bool(favorable_raw <= resolver_threshold * fade_mult)
+
+
+def copy_profit_run_exit_settings(target: dict[str, Any], source: dict[str, Any]) -> None:
+    target["take_profit_enabled"] = bool(source.get("take_profit_enabled", True))
+    target["peak_trail_activation_pct"] = finite_float(source.get("peak_trail_activation_pct"), np.nan)
+    target["peak_trail_keep_frac"] = finite_float(source.get("peak_trail_keep_frac"), np.nan)
+    target["launch_check_hours"] = finite_float(source.get("launch_check_hours"), np.nan)
+    target["launch_min_mfe_pct"] = finite_float(source.get("launch_min_mfe_pct"), np.nan)
+    target["launch_max_current_profit_pct"] = finite_float(source.get("launch_max_current_profit_pct"), np.nan)
+
+
+def current_profit_pct(side: float, entry_price: float, close_price: float) -> float:
+    if not np.isfinite(entry_price) or entry_price <= 0.0 or not np.isfinite(close_price):
+        return float("nan")
+    return float(side * (float(close_price) / float(entry_price) - 1.0))
+
+
+def best_profit_from_bar(side: float, entry_price: float, high_price: float, low_price: float) -> float:
+    if not np.isfinite(entry_price) or entry_price <= 0.0:
+        return float("nan")
+    if side > 0:
+        return float(high_price / entry_price - 1.0) if np.isfinite(high_price) else float("nan")
+    return float(1.0 - low_price / entry_price) if np.isfinite(low_price) else float("nan")
 
 
 def funding_return_between(
@@ -828,11 +855,17 @@ def init_state(config: dict[str, Any], force: bool = False) -> dict[str, Any]:
                 "leverage": float(account["leverage"]),
                 "take_profit_pct": float(account["take_profit_pct"]),
                 "take_profit_mode": str(account.get("take_profit_mode", "fixed")),
+                "take_profit_enabled": bool(account.get("take_profit_enabled", True)),
                 "stop_loss_pct": float(account.get("stop_loss_pct", config["execution"]["max_stop_pct"])),
                 "exit_model": str(account.get("exit_model", "fixed_tpsl")),
                 "emotion_exit_mode": str(account.get("emotion_exit_mode", "none")),
                 "emotion_min_profit_pct": finite_float(account.get("emotion_min_profit_pct"), np.nan),
                 "emotion_fade_mult": finite_float(account.get("emotion_fade_mult"), np.nan),
+                "peak_trail_activation_pct": finite_float(account.get("peak_trail_activation_pct"), np.nan),
+                "peak_trail_keep_frac": finite_float(account.get("peak_trail_keep_frac"), np.nan),
+                "launch_check_hours": finite_float(account.get("launch_check_hours"), np.nan),
+                "launch_min_mfe_pct": finite_float(account.get("launch_min_mfe_pct"), np.nan),
+                "launch_max_current_profit_pct": finite_float(account.get("launch_max_current_profit_pct"), np.nan),
                 "strategy_ids": normalize_strategy_ids(account.get("strategy_ids", [])),
                 "positions": [],
                 "orders": [],
@@ -899,11 +932,13 @@ def sync_state_accounts_from_config(config: dict[str, Any], state: dict[str, Any
         match["leverage"] = float(cfg["leverage"])
         match["take_profit_pct"] = float(cfg["take_profit_pct"])
         match["take_profit_mode"] = str(cfg.get("take_profit_mode", "fixed"))
+        match["take_profit_enabled"] = bool(cfg.get("take_profit_enabled", True))
         match["stop_loss_pct"] = float(cfg.get("stop_loss_pct", config["execution"]["max_stop_pct"]))
         match["exit_model"] = str(cfg.get("exit_model", "fixed_tpsl"))
         match["emotion_exit_mode"] = str(cfg.get("emotion_exit_mode", "none"))
         match["emotion_min_profit_pct"] = finite_float(cfg.get("emotion_min_profit_pct"), np.nan)
         match["emotion_fade_mult"] = finite_float(cfg.get("emotion_fade_mult"), np.nan)
+        copy_profit_run_exit_settings(match, cfg)
         match["strategy_ids"] = normalize_strategy_ids(cfg.get("strategy_ids", []))
         match.setdefault("positions", [])
         match.setdefault("orders", [])
@@ -913,10 +948,13 @@ def sync_state_accounts_from_config(config: dict[str, Any], state: dict[str, Any
             position["position_margin_pct"] = float(match["position_margin_pct"])
             position["leverage"] = float(match["leverage"])
             position["take_profit_mode"] = str(match["take_profit_mode"])
+            position["take_profit_enabled"] = bool(match.get("take_profit_enabled", True))
             position["exit_model"] = str(match["exit_model"])
             position["emotion_exit_mode"] = str(match["emotion_exit_mode"])
             position["emotion_min_profit_pct"] = finite_float(match.get("emotion_min_profit_pct"), np.nan)
             position["emotion_fade_mult"] = finite_float(match.get("emotion_fade_mult"), np.nan)
+            copy_profit_run_exit_settings(position, match)
+            position["best_profit_pct"] = finite_float(position.get("best_profit_pct"), 0.0)
             side = side_float(str(position.get("side", "long")))
             entry_price = finite_float(position.get("entry_price"))
             if np.isfinite(entry_price) and entry_price > 0.0:
@@ -1085,15 +1123,59 @@ def check_exits(config: dict[str, Any], state: dict[str, Any], tick_time: pd.Tim
                     }
                     break
                 tp_fill = None
-                if side > 0 and bar_high >= float(position["take_profit_price"]):
-                    tp_fill = bar_open if bar_open >= float(position["take_profit_price"]) else float(position["take_profit_price"])
-                elif side < 0 and bar_low <= float(position["take_profit_price"]):
-                    tp_fill = bar_open if bar_open <= float(position["take_profit_price"]) else float(position["take_profit_price"])
+                take_profit_enabled = bool(position.get("take_profit_enabled", True))
+                take_profit_target = finite_float(position.get("take_profit_price"))
+                if take_profit_enabled and np.isfinite(take_profit_target) and side > 0 and bar_high >= take_profit_target:
+                    tp_fill = bar_open if bar_open >= take_profit_target else take_profit_target
+                elif take_profit_enabled and np.isfinite(take_profit_target) and side < 0 and bar_low <= take_profit_target:
+                    tp_fill = bar_open if bar_open <= take_profit_target else take_profit_target
                 if tp_fill is not None:
                     exit_event = {
                         "time": pd.Timestamp(ts) + pd.Timedelta(minutes=1),
                         "price": float(tp_fill),
                         "reason": "intrabar_take_profit",
+                        "funding_cutoff_time": pd.Timestamp(ts),
+                    }
+                    break
+                entry_price = finite_float(position.get("entry_price"))
+                current_profit = current_profit_pct(side, entry_price, bar_close)
+                bar_best_profit = best_profit_from_bar(side, entry_price, bar_high, bar_low)
+                best_profit = finite_float(position.get("best_profit_pct"), 0.0)
+                if np.isfinite(bar_best_profit):
+                    best_profit = max(best_profit, float(bar_best_profit))
+                    position["best_profit_pct"] = float(best_profit)
+                peak_activation = finite_float(position.get("peak_trail_activation_pct"))
+                peak_keep = finite_float(position.get("peak_trail_keep_frac"))
+                if (
+                    np.isfinite(peak_activation)
+                    and np.isfinite(peak_keep)
+                    and best_profit >= peak_activation
+                    and np.isfinite(current_profit)
+                    and current_profit <= best_profit * peak_keep
+                ):
+                    exit_event = {
+                        "time": pd.Timestamp(ts) + pd.Timedelta(minutes=1),
+                        "price": float(bar_close),
+                        "reason": "peak_trail_exit",
+                        "funding_cutoff_time": pd.Timestamp(ts),
+                    }
+                    break
+                launch_check_hours = finite_float(position.get("launch_check_hours"))
+                launch_min_mfe = finite_float(position.get("launch_min_mfe_pct"))
+                launch_max_current = finite_float(position.get("launch_max_current_profit_pct"))
+                if (
+                    np.isfinite(launch_check_hours)
+                    and np.isfinite(launch_min_mfe)
+                    and np.isfinite(launch_max_current)
+                    and np.isfinite(current_profit)
+                    and pd.Timestamp(ts) - pd.Timestamp(position["entry_fill_time"]) >= pd.Timedelta(hours=launch_check_hours)
+                    and best_profit < launch_min_mfe
+                    and current_profit <= launch_max_current
+                ):
+                    exit_event = {
+                        "time": pd.Timestamp(ts) + pd.Timedelta(minutes=1),
+                        "price": float(bar_close),
+                        "reason": "failed_launch_exit",
                         "funding_cutoff_time": pd.Timestamp(ts),
                     }
                     break
@@ -1256,9 +1338,16 @@ def build_position_from_signal(
         "position_margin_pct": float(account["position_margin_pct"]),
         "take_profit_pct": float(take_profit_pct),
         "take_profit_mode": str(account.get("take_profit_mode", "fixed")),
+        "take_profit_enabled": bool(account.get("take_profit_enabled", True)),
         "take_profit_price": take_profit_price(fill_price, direction, take_profit_pct),
         "stop_loss_pct": float(account.get("stop_loss_pct", config["execution"]["max_stop_pct"])),
         "protective_stop_price": protective_stop_price(fill_price, direction, config, account),
+        "best_profit_pct": 0.0,
+        "peak_trail_activation_pct": finite_float(account.get("peak_trail_activation_pct"), np.nan),
+        "peak_trail_keep_frac": finite_float(account.get("peak_trail_keep_frac"), np.nan),
+        "launch_check_hours": finite_float(account.get("launch_check_hours"), np.nan),
+        "launch_min_mfe_pct": finite_float(account.get("launch_min_mfe_pct"), np.nan),
+        "launch_max_current_profit_pct": finite_float(account.get("launch_max_current_profit_pct"), np.nan),
         "tx_cost_bps": float(config["execution"]["tx_cost_bps"]),
         "last_checked_time": fill_time.isoformat(),
         "signal_gate": signal["signal_gate"],
@@ -1415,6 +1504,8 @@ def format_event_message(event: dict[str, Any], state: dict[str, Any], tick_time
         "protective_stop": "硬止损",
         "intrabar_take_profit": "盘中止盈",
         "emotion_fade_exit": "情绪消退止盈",
+        "peak_trail_exit": "峰值利润回撤退出",
+        "failed_launch_exit": "趋势未启动退出",
         "time_exit": "最长持仓到期",
         "late_stop_guard": "延迟止损保护",
         "reverse": "反向信号",
@@ -1439,15 +1530,25 @@ def format_event_message(event: dict[str, Any], state: dict[str, Any], tick_time
     if event.get("event") == "entry":
         score = safe_float(event.get("score", np.nan))
         profile_rate = safe_float(event.get("profile_viable_rate", np.nan))
+        take_profit_enabled = bool(event.get("take_profit_enabled", True))
+        take_profit_lines = (
+            [
+                f"止盈比例：{safe_float(event.get('take_profit_pct', np.nan)):.2%}",
+                f"止盈价：{safe_float(event.get('take_profit_price', np.nan)):.8g}",
+            ]
+            if take_profit_enabled
+            else ["固定止盈：禁用，使用峰值利润追踪/趋势未启动/情绪衰退退出"]
+        )
         lines.extend(
             [
                 f"成交时间：{event.get('entry_fill_time')}",
                 f"成交价：{safe_float(event.get('entry_price', np.nan)):.8g}",
                 f"保证金：{safe_float(event.get('margin_usdt', np.nan)):.4f} USDT",
                 f"名义仓位：{safe_float(event.get('notional_usdt', np.nan)):.4f} USDT",
-                f"止盈比例：{safe_float(event.get('take_profit_pct', np.nan)):.2%}",
-                f"止盈价：{safe_float(event.get('take_profit_price', np.nan)):.8g}",
+                *take_profit_lines,
                 f"硬止损价：{safe_float(event.get('protective_stop_price', np.nan)):.8g}",
+                f"峰值追踪：浮盈达到{safe_float(event.get('peak_trail_activation_pct', np.nan)):.2%}后，回撤到峰值利润{safe_float(event.get('peak_trail_keep_frac', np.nan)):.2%}退出",
+                f"趋势未启动：{safe_float(event.get('launch_check_hours', np.nan)):.0f}小时内MFE低于{safe_float(event.get('launch_min_mfe_pct', np.nan)):.2%}且当前利润不超过{safe_float(event.get('launch_max_current_profit_pct', np.nan)):.2%}则退出",
                 f"模型分数：{score:.6f}" if np.isfinite(score) else "模型分数：n/a",
                 f"历史画像可行率：{profile_rate:.4f}" if np.isfinite(profile_rate) else "历史画像可行率：n/a",
             ]
